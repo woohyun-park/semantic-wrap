@@ -1,0 +1,36 @@
+{
+  "name": "@semantic-wrap/react",
+  "version": "0.1.0",
+  "description": "Headless React adapter for semantic-wrap.",
+  "keywords": ["react", "typography", "line-breaking", "text-wrap"],
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist", "LICENSE", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/woohyun-park/semantic-wrap.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/woohyun-park/semantic-wrap#readme",
+  "bugs": { "url": "https://github.com/woohyun-park/semantic-wrap/issues" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepack": "bun run build",
+    "pack:check": "bun pm pack --dry-run --ignore-scripts"
+  },
+  "dependencies": {
+    "@semantic-wrap/core": "^0.1.0"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0"
+  },
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=18" }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@semantic-wrap/core",
+  "version": "0.1.0",
+  "description": "Dependency-free semantic line-breaking engine.",
+  "keywords": ["typography", "line-breaking", "text-wrap", "budoux"],
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist", "LICENSE", "NOTICE", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/woohyun-park/semantic-wrap.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/woohyun-park/semantic-wrap#readme",
+  "bugs": { "url": "https://github.com/woohyun-park/semantic-wrap/issues" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepack": "bun run build",
+    "pack:check": "bun pm pack --dry-run --ignore-scripts"
+  },
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=18" }
+}

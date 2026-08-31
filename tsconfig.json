@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": {
+      "@semantic-wrap/core": ["./packages/core/src/index.ts"],
+      "@semantic-wrap/ko": ["./packages/ko/src/index.ts"],
+      "@semantic-wrap/react": ["./packages/react/src/index.tsx"]
+    },
+    "strict": true,
+    "target": "ES2022",
+    "types": ["bun"]
+  },
+  "include": ["packages", "tests", "playwright.config.ts"]
+}

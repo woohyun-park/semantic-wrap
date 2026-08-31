@@ -1,0 +1,9 @@
+semantic-wrap
+Copyright 2026 Woohyun Park
+
+This product includes a small BudouX-compatible model inference implementation
+adapted from the BudouX Parser, Copyright 2021 Google LLC, licensed under the
+Apache License 2.0.
+
+BudouX: https://github.com/google/budoux
+Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0

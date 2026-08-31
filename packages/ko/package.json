@@ -1,0 +1,33 @@
+{
+  "name": "@semantic-wrap/ko",
+  "version": "0.1.0",
+  "description": "Cumulative Korean semantic title model for semantic-wrap.",
+  "keywords": ["korean", "typography", "line-breaking", "budoux"],
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist", "LICENSE", "MODEL_CARD.md", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/woohyun-park/semantic-wrap.git",
+    "directory": "packages/ko"
+  },
+  "homepage": "https://github.com/woohyun-park/semantic-wrap#readme",
+  "bugs": { "url": "https://github.com/woohyun-park/semantic-wrap/issues" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepack": "bun run build",
+    "pack:check": "bun pm pack --dry-run --ignore-scripts"
+  },
+  "dependencies": {
+    "@semantic-wrap/core": "^0.1.0"
+  },
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=18" }
+}

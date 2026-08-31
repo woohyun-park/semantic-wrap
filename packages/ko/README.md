@@ -1,0 +1,30 @@
+# @semantic-wrap/ko
+
+`@semantic-wrap/ko`는 `semantic-wrap`에서 사용할 수 있는 한국어 제목용 phrase
+model입니다.
+
+## 사용 예시
+
+```ts
+import { getBreakCandidates } from "@semantic-wrap/core";
+import { koTitleModel } from "@semantic-wrap/ko";
+
+const candidates = getBreakCandidates(
+  "더 나은 사용자 경험을 만드는 방법",
+  koTitleModel,
+);
+```
+
+React에서는 `@semantic-wrap/react`의 `SemanticWrap` 또는 `useSemanticWrap`에
+`koTitleModel`을 전달하세요.
+
+> [!WARNING]
+> 이 패키지는 소규모 데이터셋으로 학습한 실험적 프리셋입니다. 정확도를 높이려면
+> 실제 사용 환경을 대표하는 대규모 데이터셋으로 학습하고 검증한 모델을 권장합니다.
+
+패키지에는 coarse, medium, fine 단계가 누적된 모델 하나만 포함됩니다. 학습 범위와
+알려진 한계는 [Model card](./MODEL_CARD.md)를 참고하세요.
+
+## 라이선스
+
+Apache-2.0.
