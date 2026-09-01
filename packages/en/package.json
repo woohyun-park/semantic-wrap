@@ -1,17 +1,17 @@
 {
-  "name": "@semantic-wrap/react",
+  "name": "@semantic-wrap/en",
   "version": "0.1.0",
   "author": "Woohyun Park",
-  "description": "Headless React integration for model-driven line breaking.",
-  "keywords": ["react", "typography", "line-breaking", "text-wrap"],
+  "description": "Experimental English title phrase model for semantic-wrap.",
+  "keywords": ["english", "typography", "line-breaking", "budoux"],
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
-  "files": ["dist", "LICENSE", "README.md", "README-ko_kr.md"],
+  "files": ["dist", "LICENSE", "MODEL_CARD.md", "README.md", "README-ko_kr.md"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/woohyun-park/semantic-wrap.git",
-    "directory": "packages/react"
+    "directory": "packages/en"
   },
   "homepage": "https://github.com/woohyun-park/semantic-wrap#readme",
   "bugs": { "url": "https://github.com/woohyun-park/semantic-wrap/issues" },
@@ -28,9 +28,6 @@
   },
   "dependencies": {
     "@semantic-wrap/core": "^0.1.0"
-  },
-  "peerDependencies": {
-    "react": ">=19.0.0"
   },
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22" }

@@ -10,14 +10,15 @@ import {
   type ReactElement,
   type ReactNode,
   type Ref,
+  type RefCallback,
 } from "react";
 import {
-  getBreakCandidates,
-  selectLineBreaks,
+  resolveLineBreaks,
+  type LineBreakDiagnostics,
   type LineBreakSelection,
-  type LineBreakSelector,
+  type LineBreakSelectionWithDiagnostics,
+  type LineBreakStrategy,
   type PhraseModel,
-  type WrapContext,
 } from "@semantic-wrap/core";
 /*
  * Core owns language-agnostic selection. This package only measures and renders
@@ -30,21 +31,35 @@ const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLa
 export interface UseSemanticWrapOptions {
   text: string;
   model: PhraseModel;
-  selector: LineBreakSelector;
-  /** Defaults to the rendered element's content width. */
-  maxWidth?: number;
-  context?: WrapContext;
+  strategy?: LineBreakStrategy;
+  diagnostics?: boolean;
 }
 
 export interface UseSemanticWrapResult {
   ref: (element: HTMLElement | null) => void;
   selection: LineBreakSelection | null;
+  diagnostics: LineBreakDiagnostics | null;
 }
 
-function equalSelection(
-  left: LineBreakSelection | null,
-  right: LineBreakSelection,
-): boolean {
+type Resolution = LineBreakSelection | LineBreakSelectionWithDiagnostics;
+
+function equalSelectedCandidates(left: Resolution, right: Resolution): boolean {
+  return (
+    left.selectedCandidates.length === right.selectedCandidates.length &&
+    left.selectedCandidates.every((candidate, index) => {
+      const next = right.selectedCandidates[index];
+      return (
+        next !== undefined &&
+        candidate.offset === next.offset &&
+        candidate.level === next.level &&
+        candidate.name === next.name &&
+        candidate.penalty === next.penalty
+      );
+    })
+  );
+}
+
+function equalResolution(left: Resolution | null, right: Resolution): boolean {
   return (
     left !== null &&
     left.text === right.text &&
@@ -54,39 +69,54 @@ function equalSelection(
     left.breaks.length === right.breaks.length &&
     left.breaks.every((offset, index) => offset === right.breaks[index]) &&
     left.widths.length === right.widths.length &&
-    left.widths.every((width, index) => width === right.widths[index])
+    left.widths.every((width, index) => width === right.widths[index]) &&
+    equalSelectedCandidates(left, right) &&
+    JSON.stringify("diagnostics" in left ? left.diagnostics : null) ===
+      JSON.stringify("diagnostics" in right ? right.diagnostics : null)
   );
 }
 
 /** Measures a plain-text element and returns a headless line-break decision. */
 export function useSemanticWrap(options: UseSemanticWrapOptions): UseSemanticWrapResult {
   const [element, setElement] = useState<HTMLElement | null>(null);
-  const [selection, setSelection] = useState<LineBreakSelection | null>(null);
+  const [resolution, setResolution] = useState<Resolution | null>(null);
   const [measurementRevision, setMeasurementRevision] = useState(0);
 
   useBrowserLayoutEffect(() => {
     if (!element) {
-      setSelection(null);
+      setResolution(null);
       return;
     }
-    const width = options.maxWidth ?? contentWidth(element);
+    const width = contentWidth(element);
     if (!Number.isFinite(width) || width <= 0) return;
     const measurer = createTextMeasurer(element);
     try {
-      const next = selectLineBreaks({
+      const input = {
         text: options.text,
-        candidates: getBreakCandidates(options.text, options.model),
-        selector: options.selector,
+        model: options.model,
         maxWidth: width,
         measureText: measurer.measureText,
-        nativeLayout: readNativeLayout(element, options.text),
-        context: options.context,
-      });
-      setSelection((current) => (equalSelection(current, next) ? current : next));
+      };
+      const nativeLayout = readNativeLayout(element, options.text);
+      const next = options.diagnostics
+        ? resolveLineBreaks(input, {
+            nativeLayout,
+            strategy: options.strategy,
+            diagnostics: true,
+          })
+        : resolveLineBreaks(input, { nativeLayout, strategy: options.strategy });
+      setResolution((current) => (equalResolution(current, next) ? current : next));
     } finally {
       measurer.dispose();
     }
-  }, [element, measurementRevision, options.context, options.maxWidth, options.model, options.selector, options.text]);
+  }, [
+    element,
+    measurementRevision,
+    options.diagnostics,
+    options.model,
+    options.strategy,
+    options.text,
+  ]);
 
   useEffect(() => {
     if (!element) return;
@@ -94,17 +124,34 @@ export function useSemanticWrap(options: UseSemanticWrapOptions): UseSemanticWra
     if (!view) return;
     const observer = new view.ResizeObserver(() => setMeasurementRevision((value) => value + 1));
     observer.observe(element);
-    let active = true;
-    void element.ownerDocument.fonts.ready.then(() => {
-      if (active) setMeasurementRevision((value) => value + 1);
+    const mutationObserver = new view.MutationObserver(() =>
+      setMeasurementRevision((value) => value + 1),
+    );
+    mutationObserver.observe(element, {
+      attributes: true,
+      attributeFilter: ["class", "style"],
     });
+    let active = true;
+    const fonts = element.ownerDocument.fonts;
+    const remeasureAfterFontLoad = () => {
+      if (active) setMeasurementRevision((value) => value + 1);
+    };
+    void fonts.ready.then(remeasureAfterFontLoad);
+    fonts.addEventListener("loadingdone", remeasureAfterFontLoad);
     return () => {
       active = false;
       observer.disconnect();
+      mutationObserver.disconnect();
+      fonts.removeEventListener("loadingdone", remeasureAfterFontLoad);
     };
   }, [element]);
 
-  return { ref: setElement, selection };
+  return {
+    ref: setElement,
+    selection: resolution,
+    diagnostics:
+      resolution && "diagnostics" in resolution ? resolution.diagnostics : null,
+  };
 }
 
 interface SemanticChildProps {
@@ -112,15 +159,53 @@ interface SemanticChildProps {
   ref?: Ref<HTMLElement>;
 }
 
-export interface SemanticWrapProps extends Omit<UseSemanticWrapOptions, "text"> {
+export interface SemanticWrapProps
+  extends Omit<UseSemanticWrapOptions, "text" | "diagnostics"> {
   children: ReactElement<SemanticChildProps>;
   /** Receives the same HTMLElement ref as the child. React 19 only. */
   ref?: Ref<HTMLElement>;
 }
 
-function assignRef(ref: Ref<HTMLElement> | undefined, element: HTMLElement | null): void {
-  if (typeof ref === "function") ref(element);
-  else if (ref) ref.current = element;
+function attachRef(
+  ref: Ref<HTMLElement> | undefined,
+  element: HTMLElement,
+): (() => void) | undefined {
+  if (typeof ref === "function") {
+    const cleanup = ref(element);
+    return typeof cleanup === "function" ? cleanup : () => void ref(null);
+  }
+  if (!ref) return undefined;
+  ref.current = element;
+  return () => {
+    ref.current = null;
+  };
+}
+
+function mergeRefs(...refs: (Ref<HTMLElement> | undefined)[]): RefCallback<HTMLElement> {
+  return (element) => {
+    if (element === null) {
+      for (const ref of refs) {
+        if (typeof ref === "function") ref(null);
+        else if (ref) ref.current = null;
+      }
+      return;
+    }
+    const cleanups = refs.flatMap((ref) => {
+      const cleanup = attachRef(ref, element);
+      return cleanup ? [cleanup] : [];
+    });
+    return () => {
+      for (let index = cleanups.length - 1; index >= 0; index -= 1) {
+        cleanups[index]!();
+      }
+    };
+  };
+}
+
+function nextRenderedOffset(text: string, breakOffset: number): number {
+  let offset = breakOffset;
+  while (offset < text.length && /\s/u.test(text[offset]!)) offset += 1;
+  return offset;
 }
 
 function renderWithBreaks(text: string, breaks: readonly number[]): ReactNode {
@@ -129,7 +214,7 @@ function renderWithBreaks(text: string, breaks: readonly number[]): ReactNode {
   let start = 0;
   for (const offset of breaks) {
     nodes.push(text.slice(start, offset), <br key={`semantic-wrap-${offset}`} />);
-    start = offset;
+    start = nextRenderedOffset(text, offset);
   }
   nodes.push(text.slice(start));
   return <Fragment>{nodes}</Fragment>;
@@ -157,11 +242,7 @@ export function SemanticWrap({
   const childRef = child.props.ref;
   // Ref callback identity must stay stable so cloning does not detach the measured element.
   const mergedRef = useMemo(
-    () => (element: HTMLElement | null) => {
-      assignRef(childRef, element);
-      assignRef(ref, element);
-      result.ref(element);
-    },
+    () => mergeRefs(childRef, ref, result.ref),
     [childRef, ref, result.ref],
   );
   const rendered =

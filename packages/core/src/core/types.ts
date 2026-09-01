@@ -9,7 +9,6 @@ export interface PhraseModelLevel {
 }
 
 export interface PhraseModel {
-  schemaVersion: 1;
   /** Ordered only for diagnostics. Selection is driven by each level's penalty. */
   levels: readonly PhraseModelLevel[];
   /** Korean uses spaces; future CJK presets can opt into character boundaries. */
@@ -27,36 +26,102 @@ export interface BreakCandidate {
   penalty: number;
 }
 
-export interface BaselineLayout {
+export interface BreakPrediction {
+  /** UTF-16 source offset predicted by one model level. */
+  offset: number;
+  level: number;
+  name?: string;
+  penalty: number;
+}
+
+export interface LineBreakLayoutCandidate {
   /** UTF-16 source offsets at which each line except the last one ends. */
   breaks: readonly number[];
 }
 
-export type WrapContext = "mobile" | "desktop" | "unknown";
+export type BaselineLayout = LineBreakLayoutCandidate;
 
-export interface SelectorContext {
+export interface CandidateAggregationContext {
+  text: string;
+  predictions: readonly BreakPrediction[];
+  allowedOffsets: readonly number[];
+  fallbackPenalty: number;
+}
+
+export type CandidateAggregator = (
+  context: CandidateAggregationContext,
+) => readonly BreakCandidate[];
+
+export interface LayoutCalculationContext {
   text: string;
   candidates: readonly BreakCandidate[];
   maxWidth: number;
   measureText(text: string): number;
-  /** Actual browser layout when available. */
+}
+
+export type LineBreakCalculator = (
+  context: LayoutCalculationContext,
+) => readonly LineBreakLayoutCandidate[];
+
+export interface LineBreakLayout {
+  breaks: number[];
+  lines: string[];
+  widths: number[];
+  selectedCandidates: BreakCandidate[];
+  /** Number of rendered lines, including the final line. */
+  lineCount: number;
+  /** Normalized RMS distance from the ideal line width. Lower is more balanced. */
+  balanceScore: number;
+  /** Sum of the aggregated penalties at the selected boundaries. */
+  modelCost: number;
+  overflow: boolean;
+}
+
+export interface LayoutSelectionContext {
+  /** The measured browser layout, when supplied by the caller. */
+  nativeLayout?: LineBreakLayout;
+  /** Every layout candidate returned by the calculation stage, after measurement. */
+  calculatedLayouts: readonly LineBreakLayout[];
+}
+
+export type LayoutSelectionDecision =
+  | {
+      selected: "native";
+      reason?: string;
+    }
+  | {
+      selected: "calculated";
+      index: number;
+      reason?: string;
+    };
+
+export type LineBreakSelector = (
+  context: LayoutSelectionContext,
+) => LayoutSelectionDecision;
+
+export interface LineBreakStrategy {
+  aggregate: CandidateAggregator;
+  calculate: LineBreakCalculator;
+  select: LineBreakSelector;
+}
+
+export interface LineBreakStrategyOptions {
+  aggregate?: CandidateAggregator;
+  calculate?: LineBreakCalculator;
+  select?: LineBreakSelector;
+}
+
+export interface ResolveLineBreaksInput {
+  text: string;
+  model: PhraseModel;
+  maxWidth: number;
+  measureText(text: string): number;
+}
+
+export interface ResolveLineBreaksOptions {
   nativeLayout?: BaselineLayout;
-  context: WrapContext;
-}
-
-export interface LineBreakDecision {
-  /** UTF-16 source offsets selected as hard line breaks. */
-  breaks: readonly number[];
-  /** False means the renderer should leave native wrapping untouched. */
-  applied?: boolean;
-  reason?: string;
-}
-
-export type LineBreakSelector = (context: SelectorContext) => LineBreakDecision;
-
-export interface SelectLineBreaksOptions extends Omit<SelectorContext, "context"> {
-  selector: LineBreakSelector;
-  context?: WrapContext;
+  strategy?: LineBreakStrategy;
+  diagnostics?: boolean;
 }
 
 export interface LineBreakSelection {
@@ -70,7 +135,24 @@ export interface LineBreakSelection {
   overflow: boolean;
 }
 
-export interface BalanceSelectorOptions {
+export interface LineBreakDiagnostics {
+  predictions: BreakPrediction[];
+  candidates: BreakCandidate[];
+  calculatedLayouts: LineBreakLayout[];
+  nativeLayout?: LineBreakLayout;
+  selection: LayoutSelectionDecision;
+}
+
+export interface LineBreakSelectionWithDiagnostics extends LineBreakSelection {
+  diagnostics: LineBreakDiagnostics;
+}
+
+export interface BalanceOptions {
   /** Allowed normalized RMS imbalance above the most balanced layout. */
   tolerance?: number;
+}
+
+export interface ConsensusOptions {
+  /** Number of model levels that must predict a boundary before it receives model priority. */
+  minimumModels: number;
 }

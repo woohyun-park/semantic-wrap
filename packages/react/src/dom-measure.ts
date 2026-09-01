@@ -4,17 +4,50 @@ function copyComputedStyle(source: HTMLElement, target: HTMLElement): void {
   const computed = source.ownerDocument.defaultView!.getComputedStyle(source);
   for (let index = 0; index < computed.length; index += 1) {
     const property = computed.item(index);
-    target.style.setProperty(property, computed.getPropertyValue(property), computed.getPropertyPriority(property));
+    target.style.setProperty(
+      property,
+      computed.getPropertyValue(property),
+      computed.getPropertyPriority(property),
+    );
   }
+}
+
+function pixels(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function contentWidth(element: HTMLElement): number {
   const view = element.ownerDocument.defaultView;
   if (!view) return element.getBoundingClientRect().width;
   const computed = view.getComputedStyle(element);
-  const padding = Number.parseFloat(computed.paddingLeft) + Number.parseFloat(computed.paddingRight);
-  const clientWidth = element.clientWidth || element.getBoundingClientRect().width;
-  return Math.max(0, clientWidth - padding);
+  const padding = pixels(computed.paddingLeft) + pixels(computed.paddingRight);
+  if (element.clientWidth > 0) return Math.max(0, element.clientWidth - padding);
+
+  const computedWidth = pixels(computed.width);
+  if (computedWidth > 0) {
+    if (computed.boxSizing === "border-box") {
+      const border = pixels(computed.borderLeftWidth) + pixels(computed.borderRightWidth);
+      return Math.max(0, computedWidth - padding - border);
+    }
+    return computedWidth;
+  }
+
+  return Math.max(0, element.getBoundingClientRect().width - padding);
+}
+
+function normalizeMeasuredText(text: string, whiteSpace: string): string {
+  if (["pre", "pre-wrap", "break-spaces"].includes(whiteSpace)) return text;
+  const collapsed = text.replace(/[\t\f ]+/gu, " ");
+  if (whiteSpace === "pre-line") {
+    return collapsed
+      .split(/\r\n?|\n/u)
+      .map((line) => line.replace(/^ +| +$/gu, ""))
+      .join("\n");
+  }
+  return collapsed
+    .replace(/[\r\n]+/gu, " ")
+    .replace(/^ +| +$/gu, "");
 }
 
 export function createTextMeasurer(element: HTMLElement): {
@@ -29,26 +62,36 @@ export function createTextMeasurer(element: HTMLElement): {
   Object.assign(probe.style, {
     all: "initial",
     contain: "layout style paint",
-    font: computed.font,
+    fontFamily: computed.fontFamily,
     fontFeatureSettings: computed.fontFeatureSettings,
     fontKerning: computed.fontKerning,
     fontOpticalSizing: computed.fontOpticalSizing,
+    fontSize: computed.fontSize,
+    fontSizeAdjust: computed.fontSizeAdjust,
+    fontStretch: computed.fontStretch,
+    fontStyle: computed.fontStyle,
+    fontSynthesis: computed.fontSynthesis,
+    fontVariant: computed.fontVariant,
     fontVariationSettings: computed.fontVariationSettings,
+    fontWeight: computed.fontWeight,
     letterSpacing: computed.letterSpacing,
     position: "fixed",
+    tabSize: computed.tabSize,
     textTransform: computed.textTransform,
     visibility: "hidden",
     whiteSpace: "pre",
+    wordSpacing: computed.wordSpacing,
   });
   document.body.append(probe);
   const cache = new Map<string, number>();
   return {
     measureText(text) {
-      const cached = cache.get(text);
+      const measuredText = normalizeMeasuredText(text, computed.whiteSpace);
+      const cached = cache.get(measuredText);
       if (cached !== undefined) return cached;
-      probe.textContent = text;
+      probe.textContent = measuredText;
       const width = probe.getBoundingClientRect().width;
-      cache.set(text, width);
+      cache.set(measuredText, width);
       return width;
     },
     dispose() {
@@ -56,6 +99,12 @@ export function createTextMeasurer(element: HTMLElement): {
       cache.clear();
     },
   };
+}
+
+function whitespaceRunStart(text: string, offset: number): number {
+  let runStart = offset;
+  while (runStart > 0 && /\s/u.test(text[runStart - 1] ?? "")) runStart -= 1;
+  return runStart;
 }
 
 function readBreaks(element: HTMLElement, text: string): number[] {
@@ -85,17 +134,8 @@ function readBreaks(element: HTMLElement, text: string): number[] {
   if (sourceOffset !== text.length) {
     throw new Error("Could not map the rendered title back to its source text");
   }
-  return [
-    ...new Set(
-      lineStarts.map((lineStart) =>
-        /\s/u.test(text[lineStart - 1] ?? "")
-          ? lineStart - 1
-          : /\s/u.test(text[lineStart] ?? "")
-            ? lineStart
-            : lineStart,
-      ),
-    ),
-  ];
+  return [...new Set(lineStarts.map((lineStart) => whitespaceRunStart(text, lineStart)))]
+    .filter((offset) => offset > 0 && offset < text.length);
 }
 
 /** Measures native wrapping in an invisible copy, without mutating the visible element. */
@@ -103,8 +143,9 @@ export function readNativeLayout(element: HTMLElement, text: string): BaselineLa
   const document = element.ownerDocument;
   const probe = document.createElement(element.tagName.toLowerCase());
   copyComputedStyle(element, probe);
-  const rect = element.getBoundingClientRect();
+  const width = contentWidth(element);
   Object.assign(probe.style, {
+    boxSizing: "content-box",
     height: "auto",
     left: "-100000px",
     margin: "0",
@@ -117,9 +158,8 @@ export function readNativeLayout(element: HTMLElement, text: string): BaselineLa
     top: "0",
     transform: "none",
     visibility: "hidden",
-    width: `${rect.width}px`,
+    width: `${width}px`,
   });
-  probe.removeAttribute("id");
   probe.setAttribute("aria-hidden", "true");
   probe.textContent = text;
   document.body.append(probe);

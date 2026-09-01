@@ -1,17 +1,31 @@
-export { getBreakCandidates } from "./core/get-break-candidates.js";
-export { selectLineBreaks } from "./core/select-line-breaks.js";
-export { balanceSelector, greedySelector } from "./core/selectors.js";
+export { consensus, lowestPenalty } from "./core/aggregators.js";
+export { greedy, optimalLayouts } from "./core/calculators.js";
+export { balance } from "./core/selectors.js";
+export { resolveLineBreaks } from "./core/resolve-line-breaks.js";
+export { createLineBreakStrategy } from "./core/strategy.js";
 export type {
   BaselineLayout,
-  BalanceSelectorOptions,
+  BalanceOptions,
   BreakCandidate,
+  BreakPrediction,
   BudouxModel,
-  LineBreakDecision,
-  LineBreakSelection,
+  CandidateAggregationContext,
+  CandidateAggregator,
+  ConsensusOptions,
+  LayoutCalculationContext,
+  LayoutSelectionContext,
+  LayoutSelectionDecision,
+  LineBreakCalculator,
+  LineBreakDiagnostics,
+  LineBreakLayout,
+  LineBreakLayoutCandidate,
   LineBreakSelector,
+  LineBreakSelection,
+  LineBreakSelectionWithDiagnostics,
+  LineBreakStrategy,
+  LineBreakStrategyOptions,
   PhraseModel,
   PhraseModelLevel,
-  SelectLineBreaksOptions,
-  SelectorContext,
-  WrapContext,
+  ResolveLineBreaksInput,
+  ResolveLineBreaksOptions,
 } from "./core/types.js";

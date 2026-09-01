@@ -1,6 +1,7 @@
 {
   "name": "semantic-wrap",
   "private": true,
+  "author": "Woohyun Park",
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "bun@1.4.0",
@@ -17,24 +18,25 @@
   ],
   "scripts": {
     "build": "bun run clean && tsc -b tsconfig.build.json",
-    "check": "bun run typecheck && bun run test && bun run build && bun run test:browser && bun run pack:check",
-    "clean": "rm -rf packages/core/dist packages/react/dist packages/ko/dist .cache/core.tsbuildinfo .cache/react.tsbuildinfo .cache/ko.tsbuildinfo",
+    "check": "bun run typecheck && bun run test && bun run build && bun run test:browser && bun run pack:check && bun run lint:packages",
+    "clean": "rm -rf packages/core/dist packages/en/dist packages/react/dist packages/ko/dist .cache/core.tsbuildinfo .cache/en.tsbuildinfo .cache/react.tsbuildinfo .cache/ko.tsbuildinfo",
+    "lint:packages": "publint packages/core && publint packages/en && publint packages/ko && publint packages/react",
     "pack:check": "bun run --filter '@semantic-wrap/*' pack:check",
     "publish:core": "npm publish --workspace @semantic-wrap/core --access public",
+    "publish:en": "npm publish --workspace @semantic-wrap/en --access public",
     "publish:ko": "npm publish --workspace @semantic-wrap/ko --access public",
     "publish:react": "npm publish --workspace @semantic-wrap/react --access public",
+    "smoke:packages": "node scripts/verify-package-consumer.mjs",
     "test": "bun test packages",
     "test:browser": "playwright test",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
-    "@semantic-wrap/core": "workspace:*",
-    "@semantic-wrap/ko": "workspace:*",
-    "@semantic-wrap/react": "workspace:*",
     "@types/bun": "1.4.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "publint": "0.3.24",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "typescript": "^7.0.2"

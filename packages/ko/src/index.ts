@@ -7,7 +7,6 @@ import {
 
 /** Three-level Korean title model trained from cumulative semantic pseudo-labels. */
 export const koTitleModel = {
-  schemaVersion: 1,
   boundaryMode: "spaces",
   levels: [
     { name: "coarse", model: koreanTitleCoarseModel, penalty: 0 },

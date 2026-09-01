@@ -1,8 +1,8 @@
-# @semantic-wrap/ko
+# @semantic-wrap/en
 
 English | [한국어](./README-ko_kr.md)
 
-`@semantic-wrap/ko` provides an experimental Korean-title phrase model for
+`@semantic-wrap/en` provides an experimental English-title phrase model for
 `semantic-wrap`.
 
 This package is ESM-only.
@@ -11,20 +11,20 @@ This package is ESM-only.
 
 ```ts
 import { resolveLineBreaks } from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
+import { enTitleModel } from "@semantic-wrap/en";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
 const result = resolveLineBreaks({
-  text: "더 나은 사용자 경험을 만드는 방법",
-  model: koTitleModel,
-  maxWidth: 320,
+  text: "Designing products people trust without slowing down delivery",
+  model: enTitleModel,
+  maxWidth: 420,
   measureText: (text) => canvasContext.measureText(text).width,
 });
 ```
 
-With React, pass `koTitleModel` to `SemanticWrap` or `useSemanticWrap` from
+With React, pass `enTitleModel` to `SemanticWrap` or `useSemanticWrap` from
 `@semantic-wrap/react`.
 
 > [!WARNING]

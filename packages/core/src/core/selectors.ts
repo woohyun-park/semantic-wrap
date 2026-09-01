@@ -1,74 +1,98 @@
-import {
-  layoutAtBreaks,
-  nextTextOffset,
-  semanticBalancedLayout,
-} from "./line-layout.js";
 import type {
-  BalanceSelectorOptions,
+  BalanceOptions,
+  LayoutSelectionDecision,
+  LineBreakLayout,
   LineBreakSelector,
-  SelectorContext,
 } from "./types.js";
 
-function sameBreaks(left: readonly number[], right: readonly number[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+const EPSILON = 1e-9;
+
+interface SelectableLayout {
+  source: "native" | "calculated";
+  index?: number;
+  layout: LineBreakLayout;
 }
 
-/** Balances line lengths, then spends a bounded amount of balance on cheaper boundaries. */
-export function balanceSelector(options: BalanceSelectorOptions = {}): LineBreakSelector {
+function signature(layout: LineBreakLayout): string {
+  return layout.breaks.join(",");
+}
+
+function decision(
+  choice: SelectableLayout,
+  nativeReason = "native-selected",
+): LayoutSelectionDecision {
+  return choice.source === "native"
+    ? { selected: "native", reason: nativeReason }
+    : {
+        selected: "calculated",
+        index: choice.index!,
+        reason: "calculated-selected",
+      };
+}
+
+function selectByBalance(
+  layouts: SelectableLayout[],
+  tolerance: number,
+): LayoutSelectionDecision {
+  const minimumLineCount = Math.min(...layouts.map(({ layout }) => layout.lineCount));
+  let eligible = layouts.filter(({ layout }) => layout.lineCount === minimumLineCount);
+
+  const bestBalance = Math.min(...eligible.map(({ layout }) => layout.balanceScore));
+  eligible = eligible.filter(
+    ({ layout }) => layout.balanceScore <= bestBalance + tolerance + EPSILON,
+  );
+
+  eligible.sort((left, right) => {
+    const modelCost = left.layout.modelCost - right.layout.modelCost;
+    if (Math.abs(modelCost) > EPSILON) return modelCost;
+    const balanceScore = left.layout.balanceScore - right.layout.balanceScore;
+    if (Math.abs(balanceScore) > EPSILON) return balanceScore;
+    if (left.source !== right.source) return left.source === "native" ? -1 : 1;
+    return signature(left.layout).localeCompare(signature(right.layout));
+  });
+
+  return decision(eligible[0]!);
+}
+
+/** Requires model improvement before replacing a fitting native layout. */
+export function balance(options: BalanceOptions = {}): LineBreakSelector {
   const tolerance = options.tolerance ?? 0.12;
   if (!Number.isFinite(tolerance) || tolerance < 0 || tolerance > 1) {
     throw new Error("Balance tolerance must be between zero and one");
   }
-  return (context) => {
-    const semantic = semanticBalancedLayout(context, tolerance);
-    const native = context.nativeLayout
-      ? layoutAtBreaks(context, context.nativeLayout.breaks)
-      : semanticBalancedLayout(context, 0, true);
-    const nativeBreaks = native.breaks.map(({ offset }) => offset);
-    const semanticBreaks = semantic.breaks.map(({ offset }) => offset);
-    if (semantic.overflow) {
-      return { breaks: nativeBreaks, applied: false, reason: "semantic-overflow" };
-    }
-    if (sameBreaks(nativeBreaks, semanticBreaks)) {
-      return { breaks: nativeBreaks, applied: false, reason: "same-layout" };
-    }
-    return { breaks: semanticBreaks, applied: true, reason: "semantic-selected" };
-  };
-}
 
-/** Greedily fills each line while preferring the least costly boundary that fits. */
-export function greedySelector(): LineBreakSelector {
-  return (context: SelectorContext) => {
-    if (context.text === "") return { breaks: [], applied: false, reason: "empty" };
-    const breaks: number[] = [];
-    let start = 0;
-    let candidateIndex = 0;
-
-    while (start < context.text.length) {
-      if (context.measureText(context.text.slice(start)) <= context.maxWidth) break;
-      const fitting = [] as typeof context.candidates[number][];
-      let scan = candidateIndex;
-      for (; scan < context.candidates.length; scan += 1) {
-        const candidate = context.candidates[scan]!;
-        if (candidate.offset <= start) continue;
-        const line = context.text.slice(start, candidate.offset).trimEnd();
-        if (context.measureText(line) <= context.maxWidth) fitting.push(candidate);
-        else break;
-      }
-      const selected = fitting.sort((left, right) =>
-        left.penalty === right.penalty ? right.offset - left.offset : left.penalty - right.penalty,
-      )[0];
-      if (!selected) break;
-      breaks.push(selected.offset);
-      start = nextTextOffset(context.text, selected.offset);
-      candidateIndex = context.candidates.findIndex(({ offset }) => offset > selected.offset);
-      if (candidateIndex < 0) break;
+  return ({ calculatedLayouts, nativeLayout }) => {
+    const calculated = calculatedLayouts.map(
+      (layout, index): SelectableLayout => ({ source: "calculated", index, layout }),
+    );
+    const native: SelectableLayout | undefined = nativeLayout
+      ? { source: "native", layout: nativeLayout }
+      : undefined;
+    if (!native && calculated.length === 0) {
+      throw new Error("A selector requires at least one layout");
     }
 
-    return {
-      breaks,
-      applied: breaks.length > 0,
-      reason: breaks.length > 0 ? "greedy-selected" : "same-layout",
-    };
+    if (!native) {
+      const fitting = calculated.filter(({ layout }) => !layout.overflow);
+      return selectByBalance(fitting.length > 0 ? fitting : calculated, tolerance);
+    }
+
+    const fittingCalculated = calculated.filter(({ layout }) => !layout.overflow);
+    if (native.layout.overflow) {
+      return fittingCalculated.length > 0
+        ? selectByBalance(fittingCalculated, tolerance)
+        : decision(native);
+    }
+
+    const modelImproved = fittingCalculated.filter(
+      ({ layout }) =>
+        layout.lineCount === native.layout.lineCount &&
+        layout.modelCost < native.layout.modelCost - EPSILON,
+    );
+    if (modelImproved.length === 0) {
+      return decision(native, "native-no-model-improvement");
+    }
+
+    return selectByBalance([...modelImproved, native], tolerance);
   };
 }

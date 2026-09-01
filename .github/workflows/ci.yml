@@ -10,31 +10,30 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
       - run: bun install --frozen-lockfile
-      - run: bunx playwright install --with-deps chromium
+      - run: bunx playwright install --with-deps chromium firefox webkit
       - run: bun run check
 
   node-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       matrix:
-        node-version: [18, 22, 24]
+        node-version: [22, 24]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
       - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: Import published entry points
-        run: node --input-type=module -e 'await Promise.all([import("./packages/core/dist/index.js"), import("./packages/ko/dist/index.js"), import("./packages/react/dist/index.js")])'
+      - name: Install and verify package tarballs
+        run: bun run smoke:packages

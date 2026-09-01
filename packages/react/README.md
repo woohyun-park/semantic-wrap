@@ -1,57 +1,46 @@
 # @semantic-wrap/react
 
-`@semantic-wrap/react`는 실제 DOM의 글꼴과 너비를 측정해 semantic line break를
-선택하고 `<br>`로 렌더링하는 headless React adapter입니다.
+English | [한국어](./README-ko_kr.md)
 
-## 설치
+`@semantic-wrap/react` measures the rendered font, width, and native wrapping of a DOM
+element. It passes that data to Core and renders the selected calculated layout as `<br>`
+elements.
+
+## Installation
 
 ```sh
-npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/ko react
+npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/en react
 ```
 
-React 19 이상이 peer dependency로 필요합니다.
+React 19 or later is required as a peer dependency.
+This package is ESM-only.
 
-## 사용 예시
+## `SemanticWrap`
 
 ```tsx
-import { balanceSelector } from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
+import { enTitleModel } from "@semantic-wrap/en";
 import { SemanticWrap } from "@semantic-wrap/react";
-
-const titleSelector = balanceSelector({ tolerance: 0.12 });
 
 export function Title({ children }: { children: string }) {
   return (
-    <SemanticWrap model={koTitleModel} selector={titleSelector}>
+    <SemanticWrap model={enTitleModel}>
       <h1 className="title">{children}</h1>
     </SemanticWrap>
   );
 }
 ```
 
-```css
-.title {
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-  word-break: keep-all;
-}
-```
-
-`SemanticWrap`은 자식 엘리먼트를 그대로 사용하며 별도 wrapper나 CSS를 추가하지
-않습니다. 자식은 하나의 plain-text React element여야 하고 실제 `HTMLElement`로
-ref를 전달해야 합니다.
+`SemanticWrap` preserves its child element and adds no wrapper or CSS. Pass exactly one
+plain-text React element that forwards its ref to an actual `HTMLElement`.
 
 ### Chakra UI
 
 ```tsx
 import { Text } from "@chakra-ui/react";
-import { balanceSelector } from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
+import { enTitleModel } from "@semantic-wrap/en";
 import { SemanticWrap } from "@semantic-wrap/react";
 
-const titleSelector = balanceSelector();
-
-<SemanticWrap model={koTitleModel} selector={titleSelector}>
+<SemanticWrap model={enTitleModel}>
   <Text textStyle="heading2">{title}</Text>
 </SemanticWrap>
 ```
@@ -59,29 +48,34 @@ const titleSelector = balanceSelector();
 ### Tailwind CSS
 
 ```tsx
-import { greedySelector } from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
+import { createLineBreakStrategy, greedy } from "@semantic-wrap/core";
+import { enTitleModel } from "@semantic-wrap/en";
 import { SemanticWrap } from "@semantic-wrap/react";
 
-<SemanticWrap model={koTitleModel} selector={greedySelector()}>
+const greedyStrategy = createLineBreakStrategy({ calculate: greedy() });
+
+<SemanticWrap model={enTitleModel} strategy={greedyStrategy}>
   <h2 className="text-3xl font-bold leading-tight">{title}</h2>
 </SemanticWrap>
 ```
 
-링크나 강조처럼 내부 markup이 있는 제목은 hook의 선택 결과를 애플리케이션 방식으로
-렌더링하세요.
+## `useSemanticWrap`
+
+Use the hook when your application needs to render or inspect the selected layout itself.
+Measurement uses the target element's computed text style. If nested markup uses different
+typography, use Core with a matching custom `measureText` function.
 
 ```tsx
-const { ref, selection } = useSemanticWrap({
+const { ref, selection, diagnostics } = useSemanticWrap({
   text: title,
-  model: koTitleModel,
-  selector: titleSelector,
+  model: enTitleModel,
+  diagnostics: true,
 });
 ```
 
-`useSemanticWrap`은 `ref`와 선택 결과만 반환하며 대상 엘리먼트의 children, 원문,
-CSS를 변경하지 않습니다.
+The hook returns a measurement ref, the selected layout, and optional diagnostics. It does
+not change the target element's children or CSS.
 
-## 라이선스
+## License
 
 Apache-2.0.

@@ -6,105 +6,339 @@
     <a href="https://github.com/woohyun-park/semantic-wrap"><img src="https://img.shields.io/github/stars/woohyun-park/semantic-wrap?style=flat-square&colorA=000&colorB=000" alt="GitHub stars" /></a>
     <a href="https://github.com/woohyun-park/semantic-wrap/blob/main/LICENSE"><img src="https://img.shields.io/github/license/woohyun-park/semantic-wrap?style=flat-square&colorA=000&colorB=000" alt="Apache-2.0 License" /></a>
   </p>
-  <p><a href="./README-en_us.md">English</a> | 한국어</p>
+  <p>English | <a href="./README-ko_kr.md">한국어</a></p>
 </div>
 
-## semantic-wrap이란?
+## What is semantic-wrap?
 
-`semantic-wrap`은 한국어 제목처럼 짧고 크게 표시하는 텍스트를 의미 단위에 맞춰
-줄바꿈하는 JavaScript 라이브러리입니다. 브라우저가 만든 줄바꿈과 의미 경계 후보를
-실제 렌더링 너비로 비교하고, 더 나은 후보가 있을 때만 `<br>`를 적용합니다.
+`semantic-wrap` is a language-independent JavaScript library that selects line breaks from a
+trained model and the actual rendered layout. It compares model-predicted boundaries with the
+browser's native wrapping and inserts `<br>` elements when the calculated layout is selected.
+Both the model and the selection strategy are replaceable, and experimental presets are
+available for English and Korean titles. The project began as an attempt to reproduce the line
+breaks that feel natural when reading Korean text.
 
-## 사용 예시
+## Examples
 
-같은 너비에서도 함께 읽어야 할 표현을 다음 줄로 넘기지 않도록 조정할 수 있습니다.
-실제 결과는 글꼴과 너비에 따라 달라집니다.
-
-| Native CSS | semantic-wrap |
+| Browser native wrapping | semantic-wrap |
 | --- | --- |
-| 자금 지원 계획 문서를 제출한<br>후 확인하는 이유는 무엇입니까? | 자금 지원 계획 문서를 제출한 후<br>확인하는 이유는 무엇입니까? |
-| 모바일 환경에서 읽기<br>좋은 제목을 만드는 방법 | 모바일 환경에서<br>읽기 좋은 제목을 만드는 방법 |
-| 효율적인 회의를 만들기<br>위해 버려야 할 습관 | 효율적인 회의를<br>만들기 위해 버려야 할 습관 |
+| Strong teams disagree openly while<br>keeping the shared goal visible | Strong teams disagree openly<br>while keeping the shared goal visible |
+| Before adding another<br>feature, understand the<br>behavior it should change | Before adding another feature,<br>understand the behavior<br>it should change |
+| The best design systems<br>create consistency without<br>blocking local needs | The best design systems<br>create consistency<br>without blocking local needs |
+| Security decisions work better when<br>they begin during product design | Security decisions work better<br>when they begin during product design |
+
+## Quick start
+
+Install all three packages to use the English preset with React.
+
+```sh
+npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/en react
+```
+
+React 19 or later is required by `@semantic-wrap/react`. Projects that use only the core or a
+model do not need React.
+
+All three packages are ESM-only.
 
 ```tsx
-import { balanceSelector } from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
+import { enTitleModel } from "@semantic-wrap/en";
 import { SemanticWrap } from "@semantic-wrap/react";
-
-const titleSelector = balanceSelector({ tolerance: 0.12 });
 
 export function Title({ children }: { children: string }) {
   return (
-    <SemanticWrap model={koTitleModel} selector={titleSelector}>
+    <SemanticWrap model={enTitleModel}>
       <h1 className="title">{children}</h1>
     </SemanticWrap>
   );
 }
 ```
 
-`SemanticWrap`은 자식 엘리먼트를 그대로 사용합니다. 별도 DOM이나 CSS를 추가하지
-않고, 선택된 줄바꿈만 `<br>`로 렌더링합니다.
+`SemanticWrap` preserves its child element and adds no wrapper or CSS. It evaluates the
+browser layout produced by the child's existing CSS together with the calculated layout
+candidates. A fitting native layout is replaced only when a same-line-count candidate has a
+lower model cost and remains within the allowed balance range. If that candidate wins,
+`SemanticWrap` inserts `<br>` at the selected offsets; otherwise, it leaves native wrapping
+unchanged.
 
-```css
-.title {
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-  word-break: keep-all;
-}
-```
+## Packages
 
-라이브러리는 `text-wrap`, `word-break`, `overflow-wrap`을 설정하거나 덮어쓰지
-않습니다. Semantic 후보가 선택되면 `<br>`가 hard break가 되고, 위 CSS 속성은 각
-hard line 안의 추가 wrapping에 적용됩니다. Native 후보가 유지되면 브라우저 CSS가
-전체 줄바꿈을 담당합니다.
-
-## 설치
-
-React에서 한국어 프리셋을 사용하려면 세 패키지를 함께 설치합니다.
-
-```sh
-npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/ko react
-```
-
-`@semantic-wrap/react`을 사용하려면 React 19 이상이 필요합니다. Core 또는 모델만
-사용하는 환경에는 React가 필요하지 않습니다.
-
-## 패키지
-
-| 패키지 | 역할 |
+| Package | Purpose |
 | --- | --- |
-| `@semantic-wrap/core` | 의미 경계 후보 생성, 레이아웃 비교, selector API |
-| `@semantic-wrap/ko` | 한국어 제목용 실험적 phrase model |
-| `@semantic-wrap/react` | DOM 측정과 `<br>` 렌더링을 담당하는 React adapter |
+| `@semantic-wrap/core` | Boundary prediction, candidate aggregation, layout calculation, and selection |
+| `@semantic-wrap/react` | React integration for DOM measurement and `<br>` rendering |
+| `@semantic-wrap/en` | Experimental phrase model for English titles |
+| `@semantic-wrap/ko` | Experimental phrase model for Korean titles |
 
-## 동작 방식
+## How it works
 
-1. Phrase model이 텍스트에서 줄바꿈 후보와 각 후보의 의미 비용을 만듭니다.
-2. Selector가 실제 글꼴과 너비로 후보 레이아웃을 측정하고 Native 레이아웃과
-   비교합니다.
-3. 더 나은 Semantic 후보가 선택되면 React adapter가 `<br>`를 렌더링합니다.
-   그렇지 않으면 원문을 그대로 두어 브라우저에 줄바꿈을 맡깁니다.
+1. A phrase model predicts line-break boundaries and assigns a cost to each one.
+2. Core aggregates the predictions and calculates multiple layout candidates at the actual
+   font and width.
+3. Core requires stronger model support before replacing a fitting native layout, then uses
+   visual balance to select the final result.
+4. When a calculated layout is selected, the React package renders `<br>` elements.
+   Otherwise, it leaves the source text unchanged and lets the browser wrap it.
 
-엘리먼트 크기가 달라지거나 웹 폰트 로딩이 끝나면 다시 측정하므로 반응형 레이아웃과
-함께 사용할 수 있습니다.
+The React package measures again when the element is resized, its class or inline style
+changes, or its web fonts finish loading, so it works with responsive layouts.
+
+## Core API
+
+### `resolveLineBreaks(input, options?)`
+
+`resolveLineBreaks` runs the complete prediction-to-selection pipeline without depending on
+React or the DOM.
+
+Required `input`:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `text` | `string` | Source text to wrap |
+| `model` | `PhraseModel` | Model that predicts boundaries and their priorities |
+| `maxWidth` | `number` | Maximum width available to one line |
+| `measureText` | `(text: string) => number` | Measures a string with the target font and returns its width |
+
+Optional `options`:
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `nativeLayout` | `BaselineLayout` | none | Existing line breaks to compare, expressed as ascending UTF-16 offsets |
+| `strategy` | `LineBreakStrategy` | default strategy | Overrides prediction aggregation, layout-candidate calculation, or final selection |
+| `diagnostics` | `boolean` | `false` | Includes intermediate pipeline results in the return value |
+
+```ts
+import { resolveLineBreaks } from "@semantic-wrap/core";
+import { enTitleModel } from "@semantic-wrap/en";
+
+const canvas = document.createElement("canvas");
+const canvasContext = canvas.getContext("2d")!;
+canvasContext.font = "700 28px system-ui";
+
+const result = resolveLineBreaks({
+  text: "Write headlines for readers not for internal approval",
+  model: enTitleModel,
+  maxWidth: 420,
+  measureText: (text) => canvasContext.measureText(text).width,
+});
+
+console.log(result.lines);
+// ["Write headlines for readers", "not for internal approval"]
+```
+
+Output: `LineBreakSelection`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `text` | `string` | Original input text |
+| `lines` | `string[]` | Text split at the selected boundaries |
+| `breaks` | `number[]` | Ascending UTF-16 offsets at which each line except the last ends |
+| `widths` | `number[]` | Width of each line returned by `measureText` |
+| `selectedCandidates` | `BreakCandidate[]` | Aggregated model candidates used by the selected layout |
+| `applied` | `boolean` | Whether the calculated breaks should be rendered |
+| `reason` | `string` | Reason returned by the selection stage |
+| `overflow` | `boolean` | Whether any selected line exceeds `maxWidth` |
+| `diagnostics` | `LineBreakDiagnostics` | Included only when `diagnostics: true` |
+
+When `nativeLayout` is provided, Core evaluates it together with the calculated layouts. If
+it is omitted, Core selects only from the calculated layouts. `SemanticWrap` and
+`useSemanticWrap` measure the browser's actual wrapping and provide it automatically. The
+default selector can replace an overflowing native layout with any fitting calculated
+layout. Otherwise, replacement requires the same line count and a lower `modelCost`.
+
+### Custom phrase models
+
+`resolveLineBreaks` accepts any model that implements `PhraseModel`. Replace `enTitleModel`
+with an independently trained model, or provide multiple models as `levels` so their
+predictions can be aggregated together.
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `levels` | yes | — | One or more models and their relative `penalty` values |
+| `fallbackPenalty` | yes | — | Cost of an allowed boundary not predicted by any level |
+| `boundaryMode` | no | `"spaces"` | `"spaces"` uses whitespace boundaries; `"characters"` uses Unicode grapheme boundaries and merges each adjacent whitespace run into one boundary |
+
+Each level's `penalty` is the cost of breaking at a boundary predicted by that model. Lower
+values are preferred during layout calculation. If multiple levels predict the same
+boundary, the default aggregation stage keeps the lowest penalty.
+
+This example creates a model that prefers the whitespace boundary after a colon:
+
+```ts
+import { resolveLineBreaks, type PhraseModel } from "@semantic-wrap/core";
+
+const canvasContext = document.createElement("canvas").getContext("2d")!;
+canvasContext.font = "700 28px system-ui";
+
+const colonTitleModel: PhraseModel = {
+  boundaryMode: "spaces",
+  levels: [
+    {
+      name: "after-colon",
+      model: { UW3: { ":": 100 } },
+      penalty: 0,
+    },
+  ],
+  fallbackPenalty: 1,
+};
+
+const result = resolveLineBreaks({
+  text: "Design review checklist: what to ask before approval",
+  model: colonTitleModel,
+  maxWidth: 400,
+  measureText: (value) => canvasContext.measureText(value).width,
+});
+
+console.log(result.lines);
+// ["Design review checklist:", "what to ask before approval"]
+```
+
+`UW3` is the BudouX feature for the character immediately before a boundary. The value
+`100` is a feature weight used by BudouX when classifying that boundary, not a probability.
+
+### Strategies
+
+The default strategy is built from three replaceable stages.
+
+| Stage | Default | Customization examples |
+| --- | --- | --- |
+| `aggregate` | `lowestPenalty()` | Require agreement across model levels with `consensus()` |
+| `calculate` | `optimalLayouts()` | Use `greedy()` or implement line-count and forbidden-boundary rules |
+| `select` | `balance()` | Require lower model cost before replacing native, then apply visual balance |
+
+`calculate` returns `LineBreakLayoutCandidate[]`. Each candidate has the shape `{ breaks }`.
+Core measures those candidates as `LineBreakLayout` values and passes them to `select`
+together with `nativeLayout`.
+
+```ts
+import {
+  balance,
+  consensus,
+  createLineBreakStrategy,
+  greedy,
+} from "@semantic-wrap/core";
+
+const strategy = createLineBreakStrategy({
+  aggregate: consensus({ minimumModels: 2 }),
+  calculate: greedy(),
+  select: balance({ tolerance: 0.12 }),
+});
+
+const result = resolveLineBreaks(input, { strategy, diagnostics: true });
+```
+
+Omitted stages use their defaults. `optimalLayouts()` returns the non-dominated,
+minimum-line candidates across visual balance and model cost. `balance()` evaluates those
+candidates together with `nativeLayout`; its default tolerance is `0.12`.
+
+When native fits, `balance()` only considers non-overflowing candidates with the same line
+count and a lower `modelCost`. It keeps native if the model provides no improvement. Visual
+balance then decides whether an improved candidate is still acceptable. If native overflows,
+any fitting calculated layout may replace it. Without `nativeLayout`, selection proceeds
+among the calculated layouts as usual.
+
+The following strategy replaces only `calculate`. It still creates a two-line title but
+rejects candidates that would leave a single word on the last line.
+
+```ts
+import {
+  createLineBreakStrategy,
+  resolveLineBreaks,
+  type LineBreakCalculator,
+} from "@semantic-wrap/core";
+import { enTitleModel } from "@semantic-wrap/en";
+
+const canvasContext = document.createElement("canvas").getContext("2d")!;
+canvasContext.font = "700 28px system-ui";
+
+const twoLineTitleCalculator: LineBreakCalculator = ({
+  text,
+  candidates,
+  maxWidth,
+  measureText,
+}) => {
+  let best: { offset: number; score: number } | undefined;
+
+  for (const candidate of candidates) {
+    const firstLine = text.slice(0, candidate.offset).trimEnd();
+    const lastLine = text.slice(candidate.offset).trimStart();
+    const firstWidth = measureText(firstLine);
+    const lastWidth = measureText(lastLine);
+
+    if (firstWidth > maxWidth || lastWidth > maxWidth) continue;
+    if (lastLine.split(/\s+/u).length < 2) continue;
+
+    const imbalance = Math.abs(firstWidth - lastWidth) / maxWidth;
+    const score = candidate.penalty + imbalance;
+    if (!best || score < best.score) best = { offset: candidate.offset, score };
+  }
+
+  return [{ breaks: best ? [best.offset] : [] }];
+};
+
+const customStrategy = createLineBreakStrategy({
+  calculate: twoLineTitleCalculator,
+});
+const input = {
+  text: "Good metrics guide decisions before they become dashboard decoration",
+  model: enTitleModel,
+  maxWidth: 600,
+  measureText: (value: string) => canvasContext.measureText(value).width,
+};
+
+console.log(resolveLineBreaks(input).lines);
+// ["Good metrics guide decisions before", "they become dashboard decoration"]
+
+console.log(resolveLineBreaks(input, { strategy: customStrategy }).lines);
+// ["Good metrics guide decisions", "before they become dashboard decoration"]
+```
+
+### Diagnostics
+
+Enable diagnostics when tuning aggregation rules or investigating a result.
+
+```ts
+const result = resolveLineBreaks(input, { diagnostics: true });
+
+console.log(result.diagnostics.predictions);
+console.log(result.diagnostics.candidates);
+```
+
+| Field | Description |
+| --- | --- |
+| `predictions` | Raw boundaries predicted by each model level; an offset may appear more than once |
+| `candidates` | One candidate list produced by `aggregate` |
+| `calculatedLayouts` | Measured layouts produced by `calculate`, including line count, balance, model cost, and overflow |
+| `nativeLayout` | Measured browser layout when supplied |
+| `selection` | Source, index, and reason returned by `select` |
+
+The default `balance()` selector uses `native-no-model-improvement` when no calculated
+layout has lower model cost. Its other reasons are `native-selected` and
+`calculated-selected`. A custom selector may return its own reason.
 
 ## React API
 
 ### `SemanticWrap`
 
-Chakra UI나 Tailwind CSS에서도 스타일을 가진 엘리먼트 바깥을 감싸면 됩니다.
+Wrap the styled element when using Chakra UI or Tailwind CSS.
+
+`SemanticWrap` accepts one plain-text React element that forwards its ref to an actual
+`HTMLElement`.
+
+| Prop | Required | Default | Description |
+| --- | --- | --- | --- |
+| `children` | yes | — | One plain-text React element |
+| `model` | yes | — | Phrase model used to create boundary candidates |
+| `strategy` | no | default strategy | Aggregation, calculation, and selection rules |
+| `ref` | no | — | `HTMLElement` ref shared with the child |
 
 #### Chakra UI
 
 ```tsx
 import { Text } from "@chakra-ui/react";
-import { balanceSelector } from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
+import { enTitleModel } from "@semantic-wrap/en";
 import { SemanticWrap } from "@semantic-wrap/react";
 
-const titleSelector = balanceSelector();
-
-<SemanticWrap model={koTitleModel} selector={titleSelector}>
+<SemanticWrap model={enTitleModel}>
   <Text textStyle="heading2">{title}</Text>
 </SemanticWrap>
 ```
@@ -112,146 +346,89 @@ const titleSelector = balanceSelector();
 #### Tailwind CSS
 
 ```tsx
-import { greedySelector } from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
+import { createLineBreakStrategy, greedy } from "@semantic-wrap/core";
+import { enTitleModel } from "@semantic-wrap/en";
 import { SemanticWrap } from "@semantic-wrap/react";
 
-<SemanticWrap model={koTitleModel} selector={greedySelector()}>
+const greedyStrategy = createLineBreakStrategy({ calculate: greedy() });
+
+<SemanticWrap model={enTitleModel} strategy={greedyStrategy}>
   <h2 className="text-3xl font-bold leading-tight">{title}</h2>
 </SemanticWrap>
 ```
 
-자식은 하나의 plain-text React element여야 하며 실제 `HTMLElement`로 ref를 전달해야
-합니다.
-
 ### `useSemanticWrap`
 
-링크나 강조처럼 내부 markup이 있는 제목은 hook의 선택 결과를 애플리케이션 방식으로
-렌더링합니다.
+Use the hook when your application needs to render the selected lines itself or inspect
+diagnostics. Measurement uses the target element's computed text style. If nested markup
+uses different typography, call Core with a matching custom `measureText` function instead.
 
 ```tsx
-const { ref, selection } = useSemanticWrap({
-  text: title,
-  model: koTitleModel,
-  selector: titleSelector,
-});
+import { enTitleModel } from "@semantic-wrap/en";
+import { useSemanticWrap } from "@semantic-wrap/react";
+
+export function BreakPreview({ title }: { title: string }) {
+  const { ref, selection } = useSemanticWrap({
+    text: title,
+    model: enTitleModel,
+  });
+  const preview = selection ? selection.lines.join(" / ") : title;
+
+  return <h1 ref={ref}>{preview}</h1>;
+}
 ```
 
-Hook은 `ref`와 선택 결과만 반환하며 대상 엘리먼트의 children, 원문, CSS를 변경하지
-않습니다.
+Options:
 
-## Headless core
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `text` | yes | — | Source text to measure and split |
+| `model` | yes | — | Phrase model used to create boundary candidates |
+| `strategy` | no | default strategy | Aggregation, calculation, and selection rules |
+| `diagnostics` | no | `false` | Whether to include intermediate pipeline results |
 
-React 없이 후보 생성과 줄바꿈 선택을 직접 사용할 수도 있습니다.
+Output: `UseSemanticWrapResult`
 
-```ts
-import {
-  balanceSelector,
-  getBreakCandidates,
-  selectLineBreaks,
-} from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
+| Field | Type | Description |
+| --- | --- | --- |
+| `ref` | `(element: HTMLElement \| null) => void` | Callback ref for the measured element |
+| `selection` | `LineBreakSelection \| null` | `null` before measurement; otherwise the selected result |
+| `diagnostics` | `LineBreakDiagnostics \| null` | `null` unless requested and measurement has completed |
 
-const text = "더 나은 사용자 경험을 만드는 방법";
-const candidates = getBreakCandidates(text, koTitleModel);
+The hook does not alter the target element's children or CSS.
 
-const result = selectLineBreaks({
-  text,
-  candidates,
-  maxWidth: 320,
-  measureText: (value) => canvasContext.measureText(value).width,
-  selector: balanceSelector({ tolerance: 0.12 }),
-});
-
-console.log(result.lines, result.breaks);
-```
-
-`nativeLayout`을 전달하면 실제 브라우저의 줄바꿈과 비교합니다. 생략하면 core가 가장
-균형 잡힌 레이아웃을 baseline으로 계산합니다. React adapter는 보이지 않는 측정
-엘리먼트를 사용해 Native 레이아웃을 자동으로 전달합니다.
-
-## Selector
-
-- `balanceSelector`는 시각적 균형 허용치 안에서 의미 비용이 낮은 후보를 찾습니다.
-  Native와 결과가 다를 때만 선택한 경계를 적용합니다.
-- `greedySelector`는 각 줄을 왼쪽부터 채우면서 현재 너비에 들어오는 경계 중 의미
-  비용이 가장 낮은 경계를 우선합니다.
-
-`balanceSelector`의 `tolerance`는 의미를 위해 허용할 시각적 불균형의 범위입니다.
-기본값은 `0.12`입니다.
-
-제품별 정책이 필요하면 selector를 교체할 수 있습니다.
-
-```ts
-const productSelector: LineBreakSelector = ({ candidates }) => {
-  const preferred = candidates.find((candidate) => candidate.name === "product-rule");
-  return {
-    breaks: preferred ? [preferred.offset] : [],
-    reason: "product-rule",
-  };
-};
-```
-
-Custom selector로 줄 수 제한, orphan 감점, 금지 경계 또는 디자인 시스템별 비용
-함수를 구현할 수 있습니다.
-
-## Custom phrase model
-
-모델 단계는 coarse, medium, fine으로 고정되지 않습니다. 하나부터 임의 개수까지
-사용할 수 있고, 같은 경계를 여러 모델이 예측하면 가장 낮은 penalty가 적용됩니다.
-
-```ts
-const myModel: PhraseModel = {
-  schemaVersion: 1,
-  boundaryMode: "spaces",
-  levels: [
-    { name: "coarse", model: coarseBudouxModel, penalty: 0 },
-    { name: "medium", model: mediumBudouxModel, penalty: 0.35 },
-    { name: "fine", model: fineBudouxModel, penalty: 0.7 },
-  ],
-  fallbackPenalty: 1,
-};
-```
-
-- `penalty`: 해당 모델이 허용한 경계에서 줄을 나누는 상대 비용
-- `fallbackPenalty`: 어떤 모델도 선택하지 않은 일반 경계의 비용
-- `boundaryMode: "spaces"`: 공백 경계만 사용
-- `boundaryMode: "characters"`: UTF-16을 보존한 문자 경계를 사용
-
-한국어 프리셋은 공백 경계만 사용하므로 모델이 어절 내부 경계를 임의로 만들지
-않습니다.
-
-## 한국어 프리셋 상태
+## Preset status
 
 > [!WARNING]
-> `@semantic-wrap/ko`는 소규모 데이터셋으로 학습한 실험적 프리셋입니다. 정확도를
-> 높이려면 실제 사용 환경을 대표하는 대규모 데이터셋으로 학습하고 검증한 모델을
-> 권장합니다. 자세한 내용은
-> [Model Card](./packages/ko/MODEL_CARD.md)를 참고하세요.
+> `@semantic-wrap/en` and `@semantic-wrap/ko` are experimental presets trained on small
+> datasets. For higher accuracy, use a model trained and validated on a large dataset
+> representative of your production environment. See the
+> [English Model Card](./packages/en/MODEL_CARD.md) and
+> [Korean Model Card](./packages/ko/MODEL_CARD.md) for details.
 
-## 개발
+## Development
 
 ```sh
 bun install
 bun run check
 ```
 
-`bun run check`는 타입 검사, 단위 테스트, 빌드, Chromium 브라우저 테스트와 npm
-패키지 구성을 차례로 확인합니다.
+`bun run check` runs type checking, unit tests, the build, Chromium, Firefox, and WebKit
+browser tests, and npm package validation.
 
-## 배포
+## Release
 
-세 패키지는 의존성 순서대로 배포합니다.
+Publish the four packages in dependency order.
 
 ```sh
 bun run check
 bun run publish:core
+bun run publish:en
 bun run publish:ko
 bun run publish:react
 ```
 
-## 라이선스
+## License
 
-Apache-2.0. `@semantic-wrap/core`에는 Google의 BudouX Parser를 수정한
-dependency-free model inference가 포함되어 있습니다. 자세한 내용은
-[NOTICE](./NOTICE)를 참고하세요.
+Apache-2.0. `@semantic-wrap/core` includes a modified, dependency-free implementation of the
+Google BudouX parser. See [NOTICE](./NOTICE) for details.

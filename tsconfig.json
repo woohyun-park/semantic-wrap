@@ -7,6 +7,7 @@
     "noEmit": true,
     "paths": {
       "@semantic-wrap/core": ["./packages/core/src/index.ts"],
+      "@semantic-wrap/en": ["./packages/en/src/index.ts"],
       "@semantic-wrap/ko": ["./packages/ko/src/index.ts"],
       "@semantic-wrap/react": ["./packages/react/src/index.tsx"]
     },
@@ -14,5 +15,5 @@
     "target": "ES2022",
     "types": ["bun"]
   },
-  "include": ["packages", "tests", "playwright.config.ts"]
+  "include": ["packages/*/src", "packages/*/tests", "tests", "playwright.config.ts"]
 }

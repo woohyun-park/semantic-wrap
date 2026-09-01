@@ -1,12 +1,13 @@
 {
   "name": "@semantic-wrap/core",
   "version": "0.1.0",
-  "description": "Dependency-free semantic line-breaking engine.",
+  "author": "Woohyun Park",
+  "description": "Dependency-free model-driven line-breaking engine.",
   "keywords": ["typography", "line-breaking", "text-wrap", "budoux"],
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
-  "files": ["dist", "LICENSE", "NOTICE", "README.md"],
+  "files": ["dist", "LICENSE", "NOTICE", "README.md", "README-ko_kr.md"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/woohyun-park/semantic-wrap.git",
@@ -26,5 +27,5 @@
     "pack:check": "bun pm pack --dry-run --ignore-scripts"
   },
   "publishConfig": { "access": "public" },
-  "engines": { "node": ">=18" }
+  "engines": { "node": ">=22" }
 }

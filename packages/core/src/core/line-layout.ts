@@ -1,20 +1,23 @@
-import type { BreakCandidate, SelectorContext } from "./types.js";
+import type {
+  BreakCandidate,
+  LayoutCalculationContext,
+  LineBreakLayoutCandidate,
+} from "./types.js";
 
 export interface InternalLayout {
   lines: string[];
   widths: number[];
   breaks: BreakCandidate[];
   lineCount: number;
-  balanceCost: number;
-  bestBalanceCost: number;
-  semanticCost: number;
-  balanceTradeoff: number;
+  balanceScore: number;
+  modelCost: number;
   overflow: boolean;
 }
 
-interface CandidateLayout extends InternalLayout {
+interface CandidateLayout {
+  breaks: BreakCandidate[];
   rawBalanceCost: number;
-  rawSemanticCost: number;
+  rawModelCost: number;
 }
 
 const EPSILON = 1e-9;
@@ -30,10 +33,10 @@ export function splitAtOffsets(text: string, offsets: readonly number[]): string
   const lines: string[] = [];
   let start = 0;
   for (const offset of offsets) {
-    lines.push(text.slice(start, offset).trimEnd());
+    lines.push(text.slice(start, offset));
     start = nextTextOffset(text, offset);
   }
-  lines.push(text.slice(start).trimEnd());
+  lines.push(text.slice(start));
   return lines;
 }
 
@@ -44,7 +47,7 @@ function signature(layout: Pick<InternalLayout, "breaks">): string {
 function dominates(left: CandidateLayout, right: CandidateLayout): boolean {
   return (
     left.rawBalanceCost <= right.rawBalanceCost + EPSILON &&
-    left.rawSemanticCost <= right.rawSemanticCost + EPSILON
+    left.rawModelCost <= right.rawModelCost + EPSILON
   );
 }
 
@@ -52,8 +55,8 @@ function pareto(layouts: CandidateLayout[]): CandidateLayout[] {
   const ordered = layouts.sort((left, right) => {
     const balance = left.rawBalanceCost - right.rawBalanceCost;
     if (Math.abs(balance) > EPSILON) return balance;
-    const semantic = left.rawSemanticCost - right.rawSemanticCost;
-    if (Math.abs(semantic) > EPSILON) return semantic;
+    const model = left.rawModelCost - right.rawModelCost;
+    if (Math.abs(model) > EPSILON) return model;
     return signature(left).localeCompare(signature(right));
   });
   const frontier: CandidateLayout[] = [];
@@ -67,59 +70,68 @@ function pareto(layouts: CandidateLayout[]): CandidateLayout[] {
   return frontier;
 }
 
-function overflowLayout(text: string, width: number): InternalLayout {
-  return {
-    lines: text === "" ? [] : [text],
-    widths: text === "" ? [] : [width],
-    breaks: [],
-    lineCount: text === "" ? 0 : 1,
-    balanceCost: 0,
-    bestBalanceCost: 0,
-    semanticCost: 0,
-    balanceTradeoff: 0,
-    overflow: text !== "" && width > 0,
-  };
+function idealWidth(context: LayoutCalculationContext, lineCount: number): number {
+  if (lineCount === 0) return 0;
+  const breakCount = Math.max(0, lineCount - 1);
+  const spacesRemovedAtBreaks = context.candidates.every(({ offset }) =>
+    /\s/u.test(context.text[offset] ?? ""),
+  );
+  const removedWhitespaceWidth =
+    spacesRemovedAtBreaks && breakCount > 0
+      ? Math.max(0, context.measureText(" ")) * breakCount
+      : 0;
+  return Math.min(
+    context.maxWidth,
+    Math.max(0, (context.measureText(context.text) - removedWhitespaceWidth) / lineCount),
+  );
 }
 
 export function layoutAtBreaks(
-  context: SelectorContext,
+  context: LayoutCalculationContext,
   breakOffsets: readonly number[],
+  unmatchedPenalty = Math.max(0, ...context.candidates.map(({ penalty }) => penalty)),
 ): InternalLayout {
   const lines = splitAtOffsets(context.text, breakOffsets);
   const widths = lines.map(context.measureText);
   const candidates = new Map(context.candidates.map((candidate) => [candidate.offset, candidate]));
-  const fallbackPenalty = Math.max(0, ...context.candidates.map(({ penalty }) => penalty));
   const breaks = breakOffsets.map(
     (offset): BreakCandidate =>
-      candidates.get(offset) ?? { offset, level: null, penalty: fallbackPenalty },
+      candidates.get(offset) ?? { offset, level: null, penalty: unmatchedPenalty },
   );
+  const lineCount = lines.length;
+  const targetWidth = idealWidth(context, lineCount);
+  const balanceScore =
+    lineCount === 0
+      ? 0
+      : Math.sqrt(
+          widths.reduce(
+            (total, width) => total + ((width - targetWidth) / context.maxWidth) ** 2,
+            0,
+          ) / lineCount,
+        );
   return {
     lines,
     widths,
     breaks,
-    lineCount: lines.length,
-    balanceCost: 0,
-    bestBalanceCost: 0,
-    semanticCost:
-      breaks.length === 0
-        ? 0
-        : breaks.reduce((sum, item) => sum + item.penalty, 0) / breaks.length,
-    balanceTradeoff: 0,
+    lineCount,
+    balanceScore,
+    modelCost: breaks.reduce((total, candidate) => total + candidate.penalty, 0),
     overflow: widths.some((width) => !Number.isFinite(width) || width > context.maxWidth + EPSILON),
   };
 }
 
-/** Finds the semantically cheapest layout within a visual-balance budget. */
-export function semanticBalancedLayout(
-  context: SelectorContext,
-  tolerance: number,
-  ignorePenalties = false,
-): InternalLayout {
-  if (context.text === "") return overflowLayout("", 0);
+/** Finds the non-dominated, minimum-line layouts across balance and model cost. */
+export function calculateOptimalLayouts(
+  context: LayoutCalculationContext,
+): LineBreakLayoutCandidate[] {
+  if (context.text === "") return [{ breaks: [] }];
   const boundaries = context.candidates;
   const positions = [0, ...boundaries.map(({ offset }) => nextTextOffset(context.text, offset))];
   const segmentText = (start: number, end: number) =>
-    context.text.slice(positions[start]!, end < boundaries.length ? boundaries[end]!.offset : undefined).trimEnd();
+    context.text.slice(
+      positions[start]!,
+      end < boundaries.length ? boundaries[end]!.offset : undefined,
+    );
   const segmentWidths = Array.from({ length: positions.length }, () =>
     new Array<number>(positions.length).fill(Number.POSITIVE_INFINITY),
   );
@@ -140,19 +152,10 @@ export function semanticBalancedLayout(
   }
   const lineCount = minimumLines[0]!;
   if (!Number.isFinite(lineCount)) {
-    return overflowLayout(context.text, context.measureText(context.text));
+    return [{ breaks: [] }];
   }
 
-  const spacesRemovedAtBreaks = context.candidates.every(({ offset }) =>
-    /\s/u.test(context.text[offset] ?? ""),
-  );
-  const removedWhitespaceWidth = spacesRemovedAtBreaks
-    ? Math.max(0, context.measureText(" ")) * Math.max(0, lineCount - 1)
-    : 0;
-  const idealWidth = Math.min(
-    context.maxWidth,
-    Math.max(0, (context.measureText(context.text) - removedWhitespaceWidth) / lineCount),
-  );
+  const targetWidth = idealWidth(context, lineCount);
   const memo = new Map<string, CandidateLayout[]>();
 
   function solve(start: number, remainingLines: number): CandidateLayout[] {
@@ -163,10 +166,9 @@ export function semanticBalancedLayout(
       const result: CandidateLayout[] =
         remainingLines === 0
           ? [{
-              lines: [], widths: [], breaks: [], lineCount: 0,
-              balanceCost: 0, bestBalanceCost: 0, semanticCost: 0,
-              balanceTradeoff: 0, overflow: false,
-              rawBalanceCost: 0, rawSemanticCost: 0,
+              breaks: [],
+              rawBalanceCost: 0,
+              rawModelCost: 0,
             }]
           : [];
       memo.set(key, result);
@@ -182,21 +184,12 @@ export function semanticBalancedLayout(
       if (isLastLine !== (remainingLines === 1)) continue;
       const rest = solve(end + 1, remainingLines - 1);
       const selectedBreak = isLastLine ? undefined : boundaries[end];
-      const normalizedDeviation = (width - idealWidth) / context.maxWidth;
+      const normalizedDeviation = (width - targetWidth) / context.maxWidth;
       for (const suffix of rest) {
         layouts.push({
-          lines: [segmentText(start, end), ...suffix.lines],
-          widths: [width, ...suffix.widths],
           breaks: selectedBreak ? [selectedBreak, ...suffix.breaks] : suffix.breaks,
-          lineCount,
-          balanceCost: 0,
-          bestBalanceCost: 0,
-          semanticCost: 0,
-          balanceTradeoff: 0,
-          overflow: false,
           rawBalanceCost: normalizedDeviation ** 2 + suffix.rawBalanceCost,
-          rawSemanticCost:
-            (ignorePenalties ? 0 : (selectedBreak?.penalty ?? 0)) + suffix.rawSemanticCost,
+          rawModelCost: (selectedBreak?.penalty ?? 0) + suffix.rawModelCost,
         });
       }
     }
@@ -206,30 +199,8 @@ export function semanticBalancedLayout(
   }
 
   const layouts = solve(0, lineCount);
-  if (layouts.length === 0) return overflowLayout(context.text, context.measureText(context.text));
-  const balanceCost = (layout: CandidateLayout) => Math.sqrt(layout.rawBalanceCost / lineCount);
-  const bestBalanceCost = Math.min(...layouts.map(balanceCost));
-  const eligible = layouts.filter(
-    (layout) => balanceCost(layout) <= bestBalanceCost + tolerance + EPSILON,
-  );
-  const winner = eligible.sort((left, right) => {
-    const semantic = left.rawSemanticCost - right.rawSemanticCost;
-    if (Math.abs(semantic) > EPSILON) return semantic;
-    const balance = balanceCost(left) - balanceCost(right);
-    if (Math.abs(balance) > EPSILON) return balance;
-    return signature(left).localeCompare(signature(right));
-  })[0]!;
-  const winnerBalanceCost = balanceCost(winner);
-  return {
-    lines: winner.lines,
-    widths: winner.widths,
-    breaks: winner.breaks,
-    lineCount,
-    balanceCost: winnerBalanceCost,
-    bestBalanceCost,
-    semanticCost:
-      winner.breaks.length === 0 ? 0 : winner.rawSemanticCost / winner.breaks.length,
-    balanceTradeoff: Math.max(0, winnerBalanceCost - bestBalanceCost),
-    overflow: false,
-  };
+  if (layouts.length === 0) return [{ breaks: [] }];
+  return layouts.map((layout) => ({
+    breaks: layout.breaks.map(({ offset }) => offset),
+  }));
 }

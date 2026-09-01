@@ -17,7 +17,7 @@ must be reproducible.
 - Short Korean display titles and headings
 - Usually one to three rendered lines
 - Text whose normal break opportunities are ASCII spaces
-- `balanceSelector({ tolerance: 0.12 })` or a product-specific selector
+- The default `balance({ tolerance: 0.12 })` selection or a product-specific strategy
 
 The preset is not intended for body copy, arbitrary HTML, vertical writing, or automatic
 character breaking inside overlong identifiers.
@@ -79,5 +79,5 @@ package. The package contains only the three weight tables and preset metadata.
 
 ## Recommended validation
 
-Before production use, evaluate the frozen model and `0.12` tolerance on unseen titles
-rendered in the application's actual fonts and widths.
+Before production use, evaluate the frozen model on unseen titles rendered in the
+application's actual fonts and widths.

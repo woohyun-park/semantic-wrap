@@ -1,44 +1,85 @@
 # @semantic-wrap/core
 
-`@semantic-wrap/core`는 의미 경계 후보를 만들고 실제 텍스트 너비에 맞는 줄바꿈을
-선택하는 dependency-free engine입니다.
+English | [한국어](./README-ko_kr.md)
 
-## 사용 예시
+`@semantic-wrap/core` is the dependency-free engine behind `semantic-wrap`. It aggregates
+model predictions into boundary candidates, calculates layout candidates at the target text
+width, and selects a final result together with an optional native layout.
+
+This package is ESM-only.
+
+## Usage
+
+```ts
+import { resolveLineBreaks } from "@semantic-wrap/core";
+import { enTitleModel } from "@semantic-wrap/en";
+
+const canvasContext = document.createElement("canvas").getContext("2d")!;
+canvasContext.font = "700 28px system-ui";
+
+const result = resolveLineBreaks({
+  text: "Write headlines for readers not for internal approval",
+  model: enTitleModel,
+  maxWidth: 420,
+  measureText: (value) => canvasContext.measureText(value).width,
+});
+
+console.log(result.lines);
+// ["Write headlines for readers", "not for internal approval"]
+```
+
+Use `@semantic-wrap/react` to measure a browser element and render the selected result as
+`<br>` elements. Experimental English and Korean presets are available from
+`@semantic-wrap/en` and `@semantic-wrap/ko`.
+
+`resolveLineBreaks` requires `text`, `model`, `maxWidth`, and `measureText`. Pass
+`nativeLayout`, `strategy`, and `diagnostics` in its optional second argument.
+
+## Strategy
+
+The strategy exposes three replaceable stages:
+
+```text
+aggregate boundary predictions
+  → calculate multiple layout candidates
+  → select from the calculated layouts and nativeLayout
+```
 
 ```ts
 import {
-  balanceSelector,
-  getBreakCandidates,
-  selectLineBreaks,
+  balance,
+  consensus,
+  createLineBreakStrategy,
+  greedy,
 } from "@semantic-wrap/core";
-import { koTitleModel } from "@semantic-wrap/ko";
 
-const text = "더 나은 사용자 경험을 만드는 방법";
-const candidates = getBreakCandidates(text, koTitleModel);
-
-const result = selectLineBreaks({
-  text,
-  candidates,
-  maxWidth: 320,
-  measureText: (value) => canvasContext.measureText(value).width,
-  selector: balanceSelector({ tolerance: 0.12 }),
+const strategy = createLineBreakStrategy({
+  aggregate: consensus({ minimumModels: 2 }),
+  calculate: greedy(),
+  select: balance({ tolerance: 0.12 }),
 });
 
-console.log(result.lines, result.breaks);
+const result = resolveLineBreaks(input, {
+  strategy,
+  diagnostics: true,
+});
 ```
 
-브라우저에서 자동 측정하고 `<br>`까지 렌더링하려면 `@semantic-wrap/react`을 함께
-사용하세요. 한국어 프리셋은 `@semantic-wrap/ko`에서 제공합니다.
+The default stages are `lowestPenalty()`, `optimalLayouts()`, and `balance()`.
+When a fitting native layout is present, `balance()` only allows same-line-count calculated
+layouts with a lower model cost to replace it. Visual balance is then used as an acceptance
+and selection criterion. An overflowing native layout may be replaced by any fitting
+calculated layout; without a native layout, Core selects among calculated layouts normally.
 
-## 공개 API
+## Public API
 
-- `getBreakCandidates`
-- `selectLineBreaks`
-- `balanceSelector`
-- `greedySelector`
-- Selector와 phrase model을 구성하는 public types
+- `resolveLineBreaks`
+- `createLineBreakStrategy`
+- `lowestPenalty`, `consensus`
+- `optimalLayouts`, `greedy`
+- `balance`
+- Public types for strategies, layouts, and phrase models
 
-## 라이선스
+## License
 
-Apache-2.0. 수정된 Google BudouX Parser에 관한 고지는 [NOTICE](./NOTICE)를
-참고하세요.
+Apache-2.0. See [NOTICE](./NOTICE) for the modified Google BudouX parser notice.

@@ -1,12 +1,13 @@
 {
   "name": "@semantic-wrap/ko",
   "version": "0.1.0",
-  "description": "Cumulative Korean semantic title model for semantic-wrap.",
+  "author": "Woohyun Park",
+  "description": "Experimental Korean title phrase model for semantic-wrap.",
   "keywords": ["korean", "typography", "line-breaking", "budoux"],
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
-  "files": ["dist", "LICENSE", "MODEL_CARD.md", "README.md"],
+  "files": ["dist", "LICENSE", "MODEL_CARD.md", "README.md", "README-ko_kr.md"],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/woohyun-park/semantic-wrap.git",
@@ -29,5 +30,5 @@
     "@semantic-wrap/core": "^0.1.0"
   },
   "publishConfig": { "access": "public" },
-  "engines": { "node": ">=18" }
+  "engines": { "node": ">=22" }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { getBreakCandidates } from "@semantic-wrap/core";
+import { resolveLineBreaks } from "@semantic-wrap/core";
 import { koTitleModel } from "../src/index.js";
 
 describe("Korean title model", () => {
@@ -23,10 +23,36 @@ describe("Korean title model", () => {
 
   test("returns every source-space fallback without inventing word-internal boundaries", () => {
     const text = "더 나은 사용자 경험을 만드는 방법";
-    const candidates = getBreakCandidates(text, koTitleModel);
+    const result = resolveLineBreaks(
+      { text, model: koTitleModel, maxWidth: 100, measureText: (value) => value.length },
+      { diagnostics: true },
+    );
+    const { candidates } = result.diagnostics;
 
     expect(candidates.length).toBe(text.split(" ").length - 1);
     expect(candidates.every(({ offset }) => text[offset] === " ")).toBe(true);
     expect(candidates.some(({ level }) => level !== null)).toBe(true);
+  });
+
+  test("keeps the frozen phrase-boundary predictions for a representative title", () => {
+    const text = "사용자를 이해하고, 더 나은 해결책을 만드는 방법";
+    const measureText = (value: string) =>
+      [...value].reduce((width, character) => width + (character === " " ? 0.5 : 1), 0);
+    const result = resolveLineBreaks(
+      { text, model: koTitleModel, maxWidth: 14, measureText },
+      { diagnostics: true },
+    );
+
+    expect(result.diagnostics.predictions).toEqual([
+      { offset: 4, level: 2, name: "fine", penalty: 0.7 },
+      { offset: 10, level: 2, name: "fine", penalty: 0.7 },
+      { offset: 20, level: 1, name: "medium", penalty: 0.35 },
+      { offset: 20, level: 2, name: "fine", penalty: 0.7 },
+    ]);
+    expect(result.breaks).toEqual([10]);
+    expect(result.lines).toEqual([
+      "사용자를 이해하고,",
+      "더 나은 해결책을 만드는 방법",
+    ]);
   });
 });
