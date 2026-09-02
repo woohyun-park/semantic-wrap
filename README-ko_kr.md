@@ -36,11 +36,11 @@ Core는 특정 언어에 종속되지 않으며, 현재 영어 제목용 `@seman
 React에서 한국어 모델을 사용하려면 다음 패키지를 설치합니다.
 
 ```sh
-npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/ko react
+npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/ko react react-dom
 ```
 
-`@semantic-wrap/react`는 React 19 이상을 지원합니다. Core나 모델만 사용하는
-환경에는 React가 필요하지 않습니다.
+`@semantic-wrap/react`는 React와 React DOM 19 이상을 지원합니다. Core나 모델만
+사용하는 환경에는 React가 필요하지 않습니다.
 
 세 패키지는 모두 ESM 전용입니다.
 
@@ -59,12 +59,10 @@ export function Title({ children }: { children: string }) {
 }
 ```
 
-`SemanticWrap`은 별도의 엘리먼트를 추가하지 않습니다. 자식 엘리먼트에 적용된 CSS로
-브라우저가 만든 줄바꿈과 모델이 제안한 여러 줄바꿈 후보를 함께 평가한 뒤, strategy가
-적용할 결과를 선택합니다. native layout이 너비 안에 들어오면, 줄 수가 같고 모델 비용이
-더 낮으면서 허용된 균형 범위 안에 있는 후보만 native를 대체할 수 있습니다. 계산된
-결과가 선택되면 해당 위치에 `<br>`을 삽입하고, 그렇지 않으면 브라우저의 줄바꿈을
-그대로 사용합니다.
+`SemanticWrap`은 별도의 엘리먼트를 추가하지 않습니다. 기본값인 precise 모드는 SSR
+원문을 HTML에 유지하되 최초의 정확한 선택이 준비될 때까지 opacity를 0으로 둔 뒤
+결과를 표시합니다. progressive 모드는 SSR 원문을 전혀 변경하지 않고 첫 viewport
+또는 element resize부터 precise 선택을 시작합니다.
 
 ## 동작 방식
 
@@ -92,9 +90,9 @@ export function Title({ children }: { children: string }) {
 React에 의존하지 않으므로 문자열 너비를 측정할 수 있는 환경이라면 어디서든 사용할 수
 있습니다.
 
-#### `resolveLineBreaks(input, options?)`
+#### `selectLineBreaks(input, options?)`
 
-`resolveLineBreaks`는 모델의 예측을 줄바꿈 후보로 모으고, 가능한 layout 후보들을 계산한
+`selectLineBreaks`는 모델의 예측을 줄바꿈 후보로 모으고, 가능한 layout 후보들을 계산한
 뒤, `nativeLayout`까지 포함해 최종 결과를 선택합니다.
 
 `input`:
@@ -124,6 +122,22 @@ Core는 특정 렌더링 환경에 의존하지 않기 때문에 `measureText`�
 native가 overflow일 때 fitting calculated layout을 허용합니다. 그 외에는 줄 수가 같고
 `modelCost`가 더 낮은 후보만 native를 대체할 수 있습니다.
 
+#### `createLineBreakPlan(input)`
+
+같은 원문, 모델, strategy를 여러 너비에서 반복 측정한다면 lazy plan을 사용합니다.
+
+```ts
+const plan = createLineBreakPlan({ text, model, strategy });
+
+plan.predict();
+plan.aggregate();
+plan.calculate({ maxWidth, measureText });
+plan.select({ maxWidth, measureText, nativeLayout });
+```
+
+뒤 단계를 호출하면 필요한 앞 단계를 자동 실행합니다. 예측과 집계는 immutable
+snapshot으로 캐시하고 계산과 선택은 measurement마다 실행합니다.
+
 출력: `LineBreakSelection`
 
 | 필드 | 타입 | 설명 |
@@ -141,14 +155,14 @@ native가 overflow일 때 fitting calculated layout을 허용합니다. 그 외�
 사용 예시:
 
 ```ts
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { koTitleModel } from "@semantic-wrap/ko";
 
 const canvas = document.createElement("canvas");
 const canvasContext = canvas.getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const result = resolveLineBreaks({
+const result = selectLineBreaks({
   text: "더 나은 사용자 경험을 만드는 방법",
   model: koTitleModel,
   maxWidth: 320,
@@ -161,7 +175,7 @@ console.log(result.lines);
 
 #### 커스텀 모델 사용하기
 
-`resolveLineBreaks`는 `PhraseModel` 인터페이스를 만족하는 모델이라면 어떤 모델이든
+`selectLineBreaks`는 `PhraseModel` 인터페이스를 만족하는 모델이라면 어떤 모델이든
 사용할 수 있습니다. `koTitleModel` 대신 별도로 학습한 모델을 전달하거나, 여러 모델을
 `levels`로 구성해 각 모델의 예측을 함께 사용할 수도 있습니다.
 
@@ -184,7 +198,7 @@ console.log(result.lines);
 
 ```ts
 import {
-  resolveLineBreaks,
+  selectLineBreaks,
   type PhraseModel,
 } from "@semantic-wrap/core";
 
@@ -210,7 +224,7 @@ const input = {
   measureText: (value: string) => canvasContext.measureText(value).width,
 };
 
-const customResult = resolveLineBreaks({
+const customResult = selectLineBreaks({
   ...input,
   model: colonTitleModel,
 });
@@ -278,7 +292,7 @@ overflow라면 모델 비용 개선 여부와 관계없이 너비 안에 들어�
 ```ts
 import {
   createLineBreakStrategy,
-  resolveLineBreaks,
+  selectLineBreaks,
   type LineBreakCalculator,
 } from "@semantic-wrap/core";
 import { koTitleModel } from "@semantic-wrap/ko";
@@ -326,8 +340,8 @@ const input = {
   measureText,
 };
 
-const defaultResult = resolveLineBreaks(input);
-const customResult = resolveLineBreaks(input, {
+const defaultResult = selectLineBreaks(input);
+const customResult = selectLineBreaks(input, {
   strategy: twoLineTitleStrategy,
 });
 
@@ -343,13 +357,13 @@ console.log(customResult.lines);
 후보 통합 규칙을 조정하거나 결과를 분석할 때는 `diagnostics: true`를 사용합니다.
 
 ```ts
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { koTitleModel } from "@semantic-wrap/ko";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const result = resolveLineBreaks(
+const result = selectLineBreaks(
   {
     text: "더 나은 사용자",
     model: koTitleModel,
@@ -388,16 +402,27 @@ console.log(result.diagnostics.candidates);
 
 #### `SemanticWrap`
 
-`SemanticWrap`에는 하나의 plain-text React 엘리먼트를 전달합니다. 별도의 wrapper나
-CSS를 추가하지 않으며 기존 props도 그대로 유지합니다. 자식 엘리먼트는 실제
-`HTMLElement`로 ref를 전달할 수 있어야 합니다.
+`SemanticWrap`에는 하나의 plain-text React 엘리먼트를 전달합니다. 별도의 wrapper를
+추가하지 않으며 기존 props도 그대로 유지합니다. 자식 엘리먼트는 실제 `HTMLElement`로
+ref를 전달할 수 있어야 합니다.
 
 | Prop | 필수 | 기본값 | 설명 |
 | --- | --- | --- | --- |
 | `children` | 예 | - | 하나의 plain-text React 엘리먼트 |
 | `model` | 예 | - | 줄바꿈 후보를 만드는 모델 |
 | `strategy` | 아니요 | 기본 strategy | 후보 통합, layout 후보 계산, 최종 선택 규칙 |
+| `mode` | 아니요 | `"precise"` | `"precise"`는 정확한 최초 결과를 기다리고, `"progressive"`는 native SSR을 즉시 표시한 뒤 첫 viewport 또는 element resize부터 precise로 동작 |
 | `ref` | 아니요 | - | 자식과 함께 사용할 `HTMLElement` ref |
+
+```tsx
+<SemanticWrap mode="progressive" model={koTitleModel}>
+  <h1>{title}</h1>
+</SemanticWrap>
+```
+
+두 모드 모두 보이지 않는 DOM copy에서 측정하고 ResizeObserver 안에서 최종 결과만
+동기적으로 반영합니다. 측정을 위해 visible element를 비우거나 원문으로 되돌리지
+않습니다.
 
 Chakra UI처럼 ref를 전달하는 컴포넌트나 Tailwind CSS로 스타일을 적용한 엘리먼트도
 같은 방식으로 사용할 수 있습니다.
@@ -470,10 +495,9 @@ export function BreakPreview({ title }: { title: string }) {
 }
 ```
 
-`SemanticWrap`과 `useSemanticWrap`은 CSS를 추가하거나 변경하지 않습니다. 기존 CSS는
-비교 대상인 브라우저의 줄바꿈에 반영됩니다. 모델 결과가 선택되면 `<br>`로 줄바꿈을
-적용하며, 엘리먼트의 너비·class·inline style이 바뀌거나 웹 폰트 로딩이 끝나면 다시
-측정합니다.
+`useSemanticWrap`은 CSS를 변경하지 않습니다. `SemanticWrap`의 precise 모드는 최초
+선택 전 opacity만 일시적으로 변경합니다. 기존 CSS는 비교 대상인 브라우저의 줄바꿈에
+반영되며, 모델 결과가 선택되면 `<br>`로 줄바꿈을 적용합니다.
 
 ### `@semantic-wrap/ko`
 

@@ -18,6 +18,7 @@
   ],
   "scripts": {
     "build": "bun run clean && tsc -b tsconfig.build.json",
+    "changeset": "changeset",
     "check": "bun run typecheck && bun run test && bun run build && bun run test:browser && bun run pack:check && bun run lint:packages",
     "clean": "rm -rf packages/core/dist packages/en/dist packages/react/dist packages/ko/dist .cache/core.tsbuildinfo .cache/en.tsbuildinfo .cache/react.tsbuildinfo .cache/ko.tsbuildinfo",
     "lint:packages": "publint packages/core && publint packages/en && publint packages/ko && publint packages/react",
@@ -29,9 +30,12 @@
     "smoke:packages": "node scripts/verify-package-consumer.mjs",
     "test": "bun test packages",
     "test:browser": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "version:packages": "changeset version && bun install --lockfile-only",
+    "release": "bun run build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.1",
     "@playwright/test": "1.62.1",
     "@types/bun": "1.4.0",
     "@types/react": "^19.2.14",

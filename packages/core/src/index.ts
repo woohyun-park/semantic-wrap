@@ -1,7 +1,8 @@
 export { consensus, lowestPenalty } from "./core/aggregators.js";
 export { greedy, optimalLayouts } from "./core/calculators.js";
 export { balance } from "./core/selectors.js";
-export { resolveLineBreaks } from "./core/resolve-line-breaks.js";
+export { createLineBreakPlan } from "./core/line-break-plan.js";
+export { selectLineBreaks } from "./core/select-line-breaks.js";
 export { createLineBreakStrategy } from "./core/strategy.js";
 export type {
   BaselineLayout,
@@ -19,6 +20,10 @@ export type {
   LineBreakDiagnostics,
   LineBreakLayout,
   LineBreakLayoutCandidate,
+  LineBreakMeasurement,
+  LineBreakPlan,
+  LineBreakPlanInput,
+  LineBreakPrediction,
   LineBreakSelector,
   LineBreakSelection,
   LineBreakSelectionWithDiagnostics,
@@ -26,6 +31,6 @@ export type {
   LineBreakStrategyOptions,
   PhraseModel,
   PhraseModelLevel,
-  ResolveLineBreaksInput,
-  ResolveLineBreaksOptions,
+  SelectLineBreaksInput,
+  SelectLineBreaksOptions,
 } from "./core/types.js";

@@ -3,7 +3,7 @@ import {
   balance,
   createLineBreakStrategy,
   greedy,
-  resolveLineBreaks,
+  selectLineBreaks,
   type BreakCandidate,
   type LineBreakLayout,
   type PhraseModel,
@@ -48,13 +48,13 @@ function layout({
   };
 }
 
-describe("resolveLineBreaks", () => {
+describe("selectLineBreaks", () => {
   test("selects a calculated layout inside the balance tolerance", () => {
     const strategy = createLineBreakStrategy({
       aggregate: () => candidates,
       select: balance(),
     });
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "하나 둘 셋", model, maxWidth: 5, measureText },
       { nativeLayout: { breaks: [4] }, strategy },
     );
@@ -78,7 +78,7 @@ describe("resolveLineBreaks", () => {
       calculate: () => [{ breaks: [2] }, { breaks: [4] }],
       select: balance({ tolerance: 0.25 }),
     });
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "하나 둘 셋", model, maxWidth: 5, measureText },
       { nativeLayout: { breaks: [4] }, strategy, diagnostics: true },
     );
@@ -179,7 +179,7 @@ describe("resolveLineBreaks", () => {
       aggregate: () => [{ offset: 2, level: null, penalty: 0.2 }],
       calculate: () => [{ breaks: [2] }],
     });
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "하나 둘 셋", model: highFallbackModel, maxWidth: 5, measureText },
       { nativeLayout: { breaks: [4] }, strategy, diagnostics: true },
     );
@@ -204,7 +204,7 @@ describe("resolveLineBreaks", () => {
     const strategy = createLineBreakStrategy({
       calculate: () => [{ breaks: [calculatedBreak] }],
     });
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       {
         text,
         model,
@@ -231,7 +231,7 @@ describe("resolveLineBreaks", () => {
       aggregate: () => aggregated,
       calculate: greedy(),
     });
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "하나 둘 셋 넷", model, maxWidth: 5, measureText },
       { strategy },
     );
@@ -246,7 +246,7 @@ describe("resolveLineBreaks", () => {
       calculate: () => [{ breaks: [2] }, { breaks: [4] }],
       select: () => ({ selected: "calculated", index: 1, reason: "product-rule" }),
     });
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "하나 둘 셋", model, maxWidth: 5, measureText },
       { strategy },
     );
@@ -257,7 +257,7 @@ describe("resolveLineBreaks", () => {
 
   test("reports an overlong token without inventing character boundaries", () => {
     const strategy = createLineBreakStrategy({ calculate: greedy() });
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "supercalifragilistic", model, maxWidth: 8, measureText },
       { strategy },
     );
@@ -266,7 +266,7 @@ describe("resolveLineBreaks", () => {
     expect(result.overflow).toBe(true);
     expect(result.applied).toBe(false);
 
-    const nativeFallback = resolveLineBreaks(
+    const nativeFallback = selectLineBreaks(
       { text: "supercalifragilistic", model, maxWidth: 8, measureText },
       { nativeLayout: { breaks: [] }, strategy },
     );
@@ -274,7 +274,7 @@ describe("resolveLineBreaks", () => {
   });
 
   test("handles empty text and a fitting single token", () => {
-    const empty = resolveLineBreaks({
+    const empty = selectLineBreaks({
       text: "",
       model,
       maxWidth: 8,
@@ -282,7 +282,7 @@ describe("resolveLineBreaks", () => {
     });
     expect(empty).toMatchObject({ lines: [], breaks: [], overflow: false, applied: false });
 
-    const single = resolveLineBreaks({
+    const single = selectLineBreaks({
       text: "제목",
       model,
       maxWidth: 8,
@@ -299,7 +299,7 @@ describe("resolveLineBreaks", () => {
   test("rejects invalid measured widths", () => {
     for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -1]) {
       expect(() =>
-        resolveLineBreaks({
+        selectLineBreaks({
           text: "하나 둘",
           model,
           maxWidth: 8,
@@ -311,7 +311,7 @@ describe("resolveLineBreaks", () => {
 
   test("validates public inputs before running the pipeline", () => {
     expect(() =>
-      resolveLineBreaks({
+      selectLineBreaks({
         text: 1 as never,
         model,
         maxWidth: 8,
@@ -320,7 +320,7 @@ describe("resolveLineBreaks", () => {
     ).toThrow("text must be a string");
 
     expect(() =>
-      resolveLineBreaks({
+      selectLineBreaks({
         text: "하나 둘",
         model,
         maxWidth: 8,
@@ -329,7 +329,7 @@ describe("resolveLineBreaks", () => {
     ).toThrow("measureText must be a function");
 
     expect(() =>
-      resolveLineBreaks(
+      selectLineBreaks(
         { text: "하나 둘", model, maxWidth: 8, measureText },
         { nativeLayout: {} as never },
       ),
@@ -339,35 +339,35 @@ describe("resolveLineBreaks", () => {
   test("validates custom calculator and selector results", () => {
     const input = { text: "하나 둘 셋", model, maxWidth: 5, measureText };
     const emptyCalculator = createLineBreakStrategy({ calculate: () => [] });
-    expect(() => resolveLineBreaks(input, { strategy: emptyCalculator })).toThrow(
+    expect(() => selectLineBreaks(input, { strategy: emptyCalculator })).toThrow(
       "at least one layout candidate",
     );
 
     const invalidSelector = createLineBreakStrategy({
       select: (() => ({ selected: "other" })) as never,
     });
-    expect(() => resolveLineBreaks(input, { strategy: invalidSelector })).toThrow(
+    expect(() => selectLineBreaks(input, { strategy: invalidSelector })).toThrow(
       "native or calculated",
     );
 
     const missingIndex = createLineBreakStrategy({
       select: (() => ({ selected: "calculated" })) as never,
     });
-    expect(() => resolveLineBreaks(input, { strategy: missingIndex })).toThrow(
+    expect(() => selectLineBreaks(input, { strategy: missingIndex })).toThrow(
       "calculated layout index",
     );
 
     const unknownBreak = createLineBreakStrategy({
       calculate: () => [{ breaks: [1] }],
     });
-    expect(() => resolveLineBreaks(input, { strategy: unknownBreak })).toThrow(
+    expect(() => selectLineBreaks(input, { strategy: unknownBreak })).toThrow(
       "aggregated candidates",
     );
 
     const missingNative = createLineBreakStrategy({
       select: () => ({ selected: "native" }),
     });
-    expect(() => resolveLineBreaks(input, { strategy: missingNative })).toThrow(
+    expect(() => selectLineBreaks(input, { strategy: missingNative })).toThrow(
       "missing native layout",
     );
   });

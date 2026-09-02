@@ -19,24 +19,24 @@ export interface PhraseModel {
 
 export interface BreakCandidate {
   /** UTF-16 source offset at which the preceding line ends. */
-  offset: number;
+  readonly offset: number;
   /** Winning model level, or `null` when this is a fallback boundary. */
-  level: number | null;
-  name?: string;
-  penalty: number;
+  readonly level: number | null;
+  readonly name?: string;
+  readonly penalty: number;
 }
 
 export interface BreakPrediction {
   /** UTF-16 source offset predicted by one model level. */
-  offset: number;
-  level: number;
-  name?: string;
-  penalty: number;
+  readonly offset: number;
+  readonly level: number;
+  readonly name?: string;
+  readonly penalty: number;
 }
 
 export interface LineBreakLayoutCandidate {
   /** UTF-16 source offsets at which each line except the last one ends. */
-  breaks: readonly number[];
+  readonly breaks: readonly number[];
 }
 
 export type BaselineLayout = LineBreakLayoutCandidate;
@@ -64,17 +64,17 @@ export type LineBreakCalculator = (
 ) => readonly LineBreakLayoutCandidate[];
 
 export interface LineBreakLayout {
-  breaks: number[];
-  lines: string[];
-  widths: number[];
-  selectedCandidates: BreakCandidate[];
+  readonly breaks: readonly number[];
+  readonly lines: readonly string[];
+  readonly widths: readonly number[];
+  readonly selectedCandidates: readonly BreakCandidate[];
   /** Number of rendered lines, including the final line. */
-  lineCount: number;
+  readonly lineCount: number;
   /** Normalized RMS distance from the ideal line width. Lower is more balanced. */
-  balanceScore: number;
+  readonly balanceScore: number;
   /** Sum of the aggregated penalties at the selected boundaries. */
-  modelCost: number;
-  overflow: boolean;
+  readonly modelCost: number;
+  readonly overflow: boolean;
 }
 
 export interface LayoutSelectionContext {
@@ -111,40 +111,72 @@ export interface LineBreakStrategyOptions {
   select?: LineBreakSelector;
 }
 
-export interface ResolveLineBreaksInput {
+export interface SelectLineBreaksInput {
   text: string;
   model: PhraseModel;
   maxWidth: number;
   measureText(text: string): number;
 }
 
-export interface ResolveLineBreaksOptions {
+export interface SelectLineBreaksOptions {
   nativeLayout?: BaselineLayout;
   strategy?: LineBreakStrategy;
   diagnostics?: boolean;
 }
 
-export interface LineBreakSelection {
+export interface LineBreakPlanInput {
   text: string;
-  lines: string[];
-  widths: number[];
-  breaks: number[];
-  selectedCandidates: BreakCandidate[];
-  applied: boolean;
-  reason: string;
-  overflow: boolean;
+  model: PhraseModel;
+  strategy?: LineBreakStrategy;
+}
+
+export interface LineBreakMeasurement {
+  maxWidth: number;
+  measureText(text: string): number;
+}
+
+export interface LineBreakSelectionInput extends LineBreakMeasurement {
+  nativeLayout?: BaselineLayout;
+  diagnostics?: boolean;
+}
+
+export interface LineBreakPrediction {
+  readonly predictions: readonly BreakPrediction[];
+  readonly allowedOffsets: readonly number[];
+  readonly fallbackPenalty: number;
+}
+
+export interface LineBreakPlan {
+  predict(): LineBreakPrediction;
+  aggregate(): readonly BreakCandidate[];
+  calculate(measurement: LineBreakMeasurement): readonly LineBreakLayout[];
+  select(
+    input: LineBreakSelectionInput & { diagnostics: true },
+  ): LineBreakSelectionWithDiagnostics;
+  select(input: LineBreakSelectionInput): LineBreakSelection;
+}
+
+export interface LineBreakSelection {
+  readonly text: string;
+  readonly lines: readonly string[];
+  readonly widths: readonly number[];
+  readonly breaks: readonly number[];
+  readonly selectedCandidates: readonly BreakCandidate[];
+  readonly applied: boolean;
+  readonly reason: string;
+  readonly overflow: boolean;
 }
 
 export interface LineBreakDiagnostics {
-  predictions: BreakPrediction[];
-  candidates: BreakCandidate[];
-  calculatedLayouts: LineBreakLayout[];
-  nativeLayout?: LineBreakLayout;
-  selection: LayoutSelectionDecision;
+  readonly predictions: readonly BreakPrediction[];
+  readonly candidates: readonly BreakCandidate[];
+  readonly calculatedLayouts: readonly LineBreakLayout[];
+  readonly nativeLayout?: LineBreakLayout;
+  readonly selection: LayoutSelectionDecision;
 }
 
 export interface LineBreakSelectionWithDiagnostics extends LineBreakSelection {
-  diagnostics: LineBreakDiagnostics;
+  readonly diagnostics: LineBreakDiagnostics;
 }
 
 export interface BalanceOptions {

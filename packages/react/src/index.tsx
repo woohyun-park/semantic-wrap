@@ -3,17 +3,21 @@ import {
   Fragment,
   cloneElement,
   isValidElement,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
+  type CSSProperties,
   type ReactElement,
   type ReactNode,
   type Ref,
   type RefCallback,
 } from "react";
+import { flushSync } from "react-dom";
 import {
-  resolveLineBreaks,
+  createLineBreakPlan,
   type LineBreakDiagnostics,
   type LineBreakSelection,
   type LineBreakSelectionWithDiagnostics,
@@ -42,6 +46,13 @@ export interface UseSemanticWrapResult {
 }
 
 type Resolution = LineBreakSelection | LineBreakSelectionWithDiagnostics;
+export type SemanticWrapMode = "precise" | "progressive";
+
+function hasDiagnostics(
+  resolution: Resolution,
+): resolution is LineBreakSelectionWithDiagnostics {
+  return "diagnostics" in resolution;
+}
 
 function equalSelectedCandidates(left: Resolution, right: Resolution): boolean {
   return (
@@ -76,92 +87,166 @@ function equalResolution(left: Resolution | null, right: Resolution): boolean {
   );
 }
 
-/** Measures a plain-text element and returns a headless line-break decision. */
-export function useSemanticWrap(options: UseSemanticWrapOptions): UseSemanticWrapResult {
+function useSemanticWrapEngine(
+  options: UseSemanticWrapOptions,
+  mode: SemanticWrapMode,
+): UseSemanticWrapResult {
   const [element, setElement] = useState<HTMLElement | null>(null);
-  const [resolution, setResolution] = useState<Resolution | null>(null);
-  const [measurementRevision, setMeasurementRevision] = useState(0);
+  const plan = useMemo(
+    () =>
+      createLineBreakPlan({
+        text: options.text,
+        model: options.model,
+        strategy: options.strategy,
+      }),
+    [options.model, options.strategy, options.text],
+  );
+  const [resolutionState, setResolutionState] = useState<Resolution | null>(null);
+  const resolutionRef = useRef<Resolution | null>(null);
+  const progressiveActiveRef = useRef(mode === "precise");
+
+  const measure = useCallback(
+    (target: HTMLElement): Resolution | null => {
+      const width = contentWidth(target);
+      if (!Number.isFinite(width) || width <= 0) return null;
+      const measurer = createTextMeasurer(target);
+      try {
+        const input = {
+          maxWidth: width,
+          measureText: measurer.measureText,
+          nativeLayout: readNativeLayout(target, options.text),
+        };
+        return options.diagnostics
+          ? plan.select({ ...input, diagnostics: true })
+          : plan.select(input);
+      } finally {
+        measurer.dispose();
+      }
+    },
+    [options.diagnostics, options.text, plan],
+  );
+
+  const measureAndCommit = useCallback(
+    (target: HTMLElement, synchronous: boolean): void => {
+      const next = measure(target);
+      if (!next) return;
+      if (equalResolution(resolutionRef.current, next)) return;
+      resolutionRef.current = next;
+      if (synchronous) {
+        flushSync(() => setResolutionState(next));
+      } else {
+        setResolutionState(next);
+      }
+    },
+    [measure],
+  );
 
   useBrowserLayoutEffect(() => {
     if (!element) {
-      setResolution(null);
+      resolutionRef.current = null;
+      setResolutionState(null);
       return;
     }
-    const width = contentWidth(element);
-    if (!Number.isFinite(width) || width <= 0) return;
-    const measurer = createTextMeasurer(element);
-    try {
-      const input = {
-        text: options.text,
-        model: options.model,
-        maxWidth: width,
-        measureText: measurer.measureText,
-      };
-      const nativeLayout = readNativeLayout(element, options.text);
-      const next = options.diagnostics
-        ? resolveLineBreaks(input, {
-            nativeLayout,
-            strategy: options.strategy,
-            diagnostics: true,
-          })
-        : resolveLineBreaks(input, { nativeLayout, strategy: options.strategy });
-      setResolution((current) => (equalResolution(current, next) ? current : next));
-    } finally {
-      measurer.dispose();
-    }
-  }, [
-    element,
-    measurementRevision,
-    options.diagnostics,
-    options.model,
-    options.strategy,
-    options.text,
-  ]);
+    const target = element;
+    const defaultView = target.ownerDocument.defaultView;
+    if (!defaultView) return;
+    const view = defaultView;
 
-  useEffect(() => {
-    if (!element) return;
-    const view = element.ownerDocument.defaultView;
-    if (!view) return;
-    const observer = new view.ResizeObserver(() => setMeasurementRevision((value) => value + 1));
-    observer.observe(element);
-    const mutationObserver = new view.MutationObserver(() =>
-      setMeasurementRevision((value) => value + 1),
-    );
-    mutationObserver.observe(element, {
+    let active = true;
+    let measuredWidth = contentWidth(target);
+    let preciseActive = mode === "precise" || progressiveActiveRef.current;
+    progressiveActiveRef.current = preciseActive;
+    if (!preciseActive && resolutionRef.current !== null) {
+      resolutionRef.current = null;
+      setResolutionState(null);
+    }
+    if (preciseActive) measureAndCommit(target, false);
+
+    function activatePrecise(nextWidth: number): void {
+      if (!active || preciseActive) return;
+      if (Number.isFinite(nextWidth) && nextWidth > 0) measuredWidth = nextWidth;
+      preciseActive = true;
+      progressiveActiveRef.current = true;
+      view.removeEventListener("resize", handleViewportResize);
+      measureAndCommit(target, true);
+    }
+
+    function handleViewportResize(): void {
+      activatePrecise(contentWidth(target));
+    }
+
+    if (!preciseActive) {
+      view.addEventListener("resize", handleViewportResize, { once: true });
+    }
+
+    const observer = new view.ResizeObserver(() => {
+      if (!active) return;
+      const nextWidth = contentWidth(target);
+      if (!Number.isFinite(nextWidth) || nextWidth <= 0) return;
+      if (Math.abs(nextWidth - measuredWidth) < 0.01) return;
+      measuredWidth = nextWidth;
+      if (!preciseActive) {
+        activatePrecise(nextWidth);
+        return;
+      }
+      measureAndCommit(target, true);
+    });
+    observer.observe(target);
+
+    const mutationObserver = new view.MutationObserver(() => {
+      if (active && preciseActive) measureAndCommit(target, true);
+    });
+    mutationObserver.observe(target, {
       attributes: true,
       attributeFilter: ["class", "style"],
     });
-    let active = true;
-    const fonts = element.ownerDocument.fonts;
+
+    const fonts = target.ownerDocument.fonts;
     const remeasureAfterFontLoad = () => {
-      if (active) setMeasurementRevision((value) => value + 1);
+      if (active && preciseActive) measureAndCommit(target, true);
     };
     void fonts.ready.then(remeasureAfterFontLoad);
     fonts.addEventListener("loadingdone", remeasureAfterFontLoad);
+
     return () => {
       active = false;
+      view.removeEventListener("resize", handleViewportResize);
       observer.disconnect();
       mutationObserver.disconnect();
       fonts.removeEventListener("loadingdone", remeasureAfterFontLoad);
     };
-  }, [element]);
+  }, [element, measureAndCommit, mode, plan]);
+
+  const resolution =
+    element &&
+    resolutionState?.text === options.text &&
+    (mode === "precise" || progressiveActiveRef.current)
+      ? resolutionState
+      : null;
 
   return {
     ref: setElement,
     selection: resolution,
-    diagnostics:
-      resolution && "diagnostics" in resolution ? resolution.diagnostics : null,
+    diagnostics: resolution && hasDiagnostics(resolution) ? resolution.diagnostics : null,
   };
+}
+
+/** Measures a plain-text element and returns a headless precise line-break decision. */
+export function useSemanticWrap(options: UseSemanticWrapOptions): UseSemanticWrapResult {
+  return useSemanticWrapEngine(options, "precise");
 }
 
 interface SemanticChildProps {
   children?: ReactNode;
   ref?: Ref<HTMLElement>;
+  style?: CSSProperties;
 }
 
 export interface SemanticWrapProps
   extends Omit<UseSemanticWrapOptions, "text" | "diagnostics"> {
   children: ReactElement<SemanticChildProps>;
+  /** Exact-first by default. Progressive keeps native SSR until a viewport or element resize. */
+  mode?: SemanticWrapMode;
   /** Receives the same HTMLElement ref as the child. React 19 only. */
   ref?: Ref<HTMLElement>;
 }
@@ -221,14 +306,18 @@ function renderWithBreaks(text: string, breaks: readonly number[]): ReactNode {
 }
 
 /**
- * Applies selected breaks to exactly one plain-text child without adding a DOM wrapper
- * or injecting CSS. Selected breaks are rendered as hard `<br>` elements.
+ * Applies selected breaks to exactly one plain-text child without adding a DOM wrapper.
+ * Precise mode keeps the SSR text transparent until the first exact selection is ready.
  */
 export function SemanticWrap({
   children,
+  mode = "precise",
   ref,
   ...options
 }: SemanticWrapProps): ReactElement {
+  if (!["precise", "progressive"].includes(mode)) {
+    throw new Error('SemanticWrap mode must be "precise" or "progressive"');
+  }
   const child = Children.only(children);
   if (!isValidElement<SemanticChildProps>(child) || child.type === Fragment) {
     throw new Error("SemanticWrap requires exactly one non-Fragment React element");
@@ -238,7 +327,7 @@ export function SemanticWrap({
     throw new Error("SemanticWrap supports plain text children only; use useSemanticWrap for markup");
   }
   const text = String(source);
-  const result = useSemanticWrap({ text, ...options });
+  const result = useSemanticWrapEngine({ text, ...options }, mode);
   const childRef = child.props.ref;
   // Ref callback identity must stay stable so cloning does not detach the measured element.
   const mergedRef = useMemo(
@@ -249,5 +338,9 @@ export function SemanticWrap({
     result.selection?.applied === true
       ? renderWithBreaks(text, result.selection.breaks)
       : text;
-  return cloneElement(child, { ref: mergedRef, children: rendered });
+  const pendingPreciseSelection = mode === "precise" && result.selection === null;
+  const style = pendingPreciseSelection
+    ? { ...child.props.style, opacity: 0 }
+    : child.props.style;
+  return cloneElement(child, { ref: mergedRef, children: rendered, style });
 }

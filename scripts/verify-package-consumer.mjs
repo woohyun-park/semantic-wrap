@@ -57,37 +57,47 @@ try {
     `import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { createLineBreakPlan, selectLineBreaks } from "@semantic-wrap/core";
 import { enTitleModel } from "@semantic-wrap/en";
 import { koTitleModel } from "@semantic-wrap/ko";
 import { SemanticWrap } from "@semantic-wrap/react";
 
 const text = "더 나은 사용자 경험을 만드는 방법";
-const result = resolveLineBreaks({
+const result = selectLineBreaks({
   text,
   model: koTitleModel,
   maxWidth: 10,
   measureText: (value) => value.length,
 });
 assert.equal(result.text, text);
+const plan = createLineBreakPlan({ text, model: koTitleModel });
+assert.equal(plan.select({ maxWidth: 10, measureText: (value) => value.length }).text, text);
 assert.equal(enTitleModel.levels.length, 3);
 const html = renderToStaticMarkup(
   createElement(SemanticWrap, { model: koTitleModel }, createElement("h1", null, text)),
 );
-assert.equal(html, \`<h1>\${text}</h1>\`);
+assert.equal(html, \`<h1 style="opacity:0">\${text}</h1>\`);
+const progressiveHtml = renderToStaticMarkup(
+  createElement(
+    SemanticWrap,
+    { mode: "progressive", model: koTitleModel },
+    createElement("h1", null, text),
+  ),
+);
+assert.equal(progressiveHtml, \`<h1>\${text}</h1>\`);
 `,
   );
   run(process.execPath, ["smoke.mjs"], temporaryDirectory);
 
   writeFileSync(
     join(temporaryDirectory, "consumer.tsx"),
-    `import { balance, createLineBreakStrategy, resolveLineBreaks, type PhraseModel } from "@semantic-wrap/core";
+    `import { balance, createLineBreakPlan, createLineBreakStrategy, selectLineBreaks, type PhraseModel } from "@semantic-wrap/core";
 import { enTitleModel } from "@semantic-wrap/en";
 import { koTitleModel } from "@semantic-wrap/ko";
 import { SemanticWrap } from "@semantic-wrap/react";
 
 const strategy = createLineBreakStrategy({ select: balance({ tolerance: 0.12 }) });
-const selection = resolveLineBreaks(
+const selection = selectLineBreaks(
   {
     text: "타입 검증",
     model: koTitleModel,
@@ -96,6 +106,8 @@ const selection = resolveLineBreaks(
   },
   { strategy },
 );
+const plan = createLineBreakPlan({ text: "타입 검증", model: koTitleModel, strategy });
+plan.select({ maxWidth: 100, measureText: (value) => value.length });
 selection.selectedCandidates satisfies typeof selection.selectedCandidates;
 enTitleModel satisfies PhraseModel;
 koTitleModel satisfies PhraseModel;

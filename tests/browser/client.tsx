@@ -22,6 +22,16 @@ const responsiveStrategy = createLineBreakStrategy({
   select: () => ({ selected: "calculated", index: 0, reason: "responsive-test" }),
 });
 
+const switchingStrategy = createLineBreakStrategy({
+  calculate: ({ maxWidth }) => [{ breaks: maxWidth < 260 ? [2] : [4] }],
+  select: () => ({ selected: "calculated", index: 0, reason: "switching-test" }),
+});
+
+const alternateProgressiveStrategy = createLineBreakStrategy({
+  calculate: () => [{ breaks: [4] }],
+  select: () => ({ selected: "calculated", index: 0, reason: "progressive-update-test" }),
+});
+
 const whitespaceStrategy = createLineBreakStrategy({
   calculate: () => [{ breaks: [2] }],
   select: () => ({ selected: "calculated", index: 0, reason: "whitespace-test" }),
@@ -60,6 +70,27 @@ function CandidateFixture() {
       <h2 ref={ref} style={{ width: 200 }}>
         하나 둘
       </h2>
+    </section>
+  );
+}
+
+function ProgressiveFixture() {
+  const [alternate, setAlternate] = useState(false);
+
+  return (
+    <section>
+      <button id="change-progressive-strategy" onClick={() => setAlternate(true)} type="button">
+        Change progressive strategy
+      </button>
+      <SemanticWrap
+        mode="progressive"
+        model={model}
+        strategy={alternate ? alternateProgressiveStrategy : responsiveStrategy}
+      >
+        <h2 id="progressive-title" className="title" style={{ width: 200 }}>
+          하나 둘 셋
+        </h2>
+      </SemanticWrap>
     </section>
   );
 }
@@ -140,6 +171,16 @@ function App() {
           하나 둘 셋
         </h1>
       </SemanticWrap>
+
+      <ProgressiveFixture />
+
+      <div id="atomic-container" style={{ width: 200 }}>
+        <SemanticWrap model={model} strategy={switchingStrategy}>
+          <h2 id="atomic-title" className="title" style={{ width: "100%" }}>
+            하나 둘 셋
+          </h2>
+        </SemanticWrap>
+      </div>
 
       <SemanticWrap model={model} strategy={whitespaceStrategy}>
         <h2 id="whitespace-title" style={{ whiteSpace: "pre", width: 200 }}>

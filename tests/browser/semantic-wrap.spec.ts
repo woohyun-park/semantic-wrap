@@ -7,7 +7,58 @@ test("renders a selected hard break without adding a wrapper", async ({ page }) 
   await expect(page.locator("#root > #title")).toHaveCount(1);
   await expect(title).toHaveClass("title");
   await expect(title.locator("br")).toHaveCount(1);
+  await expect(title).not.toHaveCSS("opacity", "0");
   expect(await title.innerText()).toBe("하나\n둘 셋");
+});
+
+test("activates progressive on viewport resize without an element width change", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const title = page.locator("#progressive-title");
+  await expect(title.locator("br")).toHaveCount(0);
+  await expect(title).not.toHaveCSS("opacity", "0");
+
+  const widthBeforeResize = await title.evaluate(
+    (element) => element.getBoundingClientRect().width,
+  );
+  await page.setViewportSize({ width: 900, height: 720 });
+
+  await expect(title.locator("br")).toHaveCount(1);
+  expect(await title.evaluate((element) => element.getBoundingClientRect().width)).toBe(
+    widthBeforeResize,
+  );
+  expect(await title.innerText()).toBe("하나\n둘 셋");
+
+  await page.locator("#change-progressive-strategy").click();
+  await expect(title.locator("br")).toHaveCount(1);
+  expect(await title.innerText()).toBe("하나 둘\n셋");
+});
+
+test("commits each resize without exposing a break-free intermediate frame", async ({ page }) => {
+  await page.goto("/");
+
+  const title = page.locator("#atomic-title");
+  await expect(title.locator("br")).toHaveCount(1);
+  const snapshots = await title.evaluate(async (element) => {
+    const container = element.parentElement!;
+    const observed: string[] = [];
+    const observer = new MutationObserver(() => observed.push(element.innerHTML));
+    observer.observe(element, { childList: true, subtree: true });
+
+    for (const width of [320, 200, 320, 200]) {
+      container.style.width = `${width}px`;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      observed.push(element.innerHTML);
+    }
+
+    observer.disconnect();
+    return observed;
+  });
+
+  expect(snapshots.length).toBeGreaterThan(0);
+  expect(snapshots.every((html) => html.includes("<br>"))).toBe(true);
 });
 
 test("remeasures after a resize and returns to native wrapping", async ({ page }) => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { koTitleModel } from "../src/index.js";
 
 describe("Korean title model", () => {
@@ -23,7 +23,7 @@ describe("Korean title model", () => {
 
   test("returns every source-space fallback without inventing word-internal boundaries", () => {
     const text = "더 나은 사용자 경험을 만드는 방법";
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text, model: koTitleModel, maxWidth: 100, measureText: (value) => value.length },
       { diagnostics: true },
     );
@@ -38,7 +38,7 @@ describe("Korean title model", () => {
     const text = "사용자를 이해하고, 더 나은 해결책을 만드는 방법";
     const measureText = (value: string) =>
       [...value].reduce((width, character) => width + (character === " " ? 0.5 : 1), 0);
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text, model: koTitleModel, maxWidth: 14, measureText },
       { diagnostics: true },
     );

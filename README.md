@@ -32,11 +32,11 @@ breaks that feel natural when reading Korean text.
 Install all three packages to use the English preset with React.
 
 ```sh
-npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/en react
+npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/en react react-dom
 ```
 
-React 19 or later is required by `@semantic-wrap/react`. Projects that use only the core or a
-model do not need React.
+React and React DOM 19 or later are required by `@semantic-wrap/react`. Projects that use
+only the core or a model do not need React.
 
 All three packages are ESM-only.
 
@@ -53,12 +53,10 @@ export function Title({ children }: { children: string }) {
 }
 ```
 
-`SemanticWrap` preserves its child element and adds no wrapper or CSS. It evaluates the
-browser layout produced by the child's existing CSS together with the calculated layout
-candidates. A fitting native layout is replaced only when a same-line-count candidate has a
-lower model cost and remains within the allowed balance range. If that candidate wins,
-`SemanticWrap` inserts `<br>` at the selected offsets; otherwise, it leaves native wrapping
-unchanged.
+`SemanticWrap` preserves its child element and adds no wrapper. Precise mode is the default:
+it keeps SSR text in the HTML, holds it at zero opacity until the first exact selection is
+ready, and then renders the result. Progressive mode leaves SSR text completely untouched
+and starts precise selection on the first viewport or element resize.
 
 ## Packages
 
@@ -84,9 +82,9 @@ changes, or its web fonts finish loading, so it works with responsive layouts.
 
 ## Core API
 
-### `resolveLineBreaks(input, options?)`
+### `selectLineBreaks(input, options?)`
 
-`resolveLineBreaks` runs the complete prediction-to-selection pipeline without depending on
+`selectLineBreaks` runs the complete prediction-to-selection pipeline without depending on
 React or the DOM.
 
 Required `input`:
@@ -107,14 +105,14 @@ Optional `options`:
 | `diagnostics` | `boolean` | `false` | Includes intermediate pipeline results in the return value |
 
 ```ts
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { enTitleModel } from "@semantic-wrap/en";
 
 const canvas = document.createElement("canvas");
 const canvasContext = canvas.getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const result = resolveLineBreaks({
+const result = selectLineBreaks({
   text: "Write headlines for readers not for internal approval",
   model: enTitleModel,
   maxWidth: 420,
@@ -145,9 +143,25 @@ it is omitted, Core selects only from the calculated layouts. `SemanticWrap` and
 default selector can replace an overflowing native layout with any fitting calculated
 layout. Otherwise, replacement requires the same line count and a lower `modelCost`.
 
+### `createLineBreakPlan(input)`
+
+Create a lazy plan when the same text, model, and strategy will be measured repeatedly:
+
+```ts
+const plan = createLineBreakPlan({ text, model, strategy });
+
+plan.predict();
+plan.aggregate();
+plan.calculate({ maxWidth, measureText });
+plan.select({ maxWidth, measureText, nativeLayout });
+```
+
+Calling a later stage runs its prerequisites. Prediction and aggregation are cached as
+immutable snapshots, while calculation and selection run for each measurement.
+
 ### Custom phrase models
 
-`resolveLineBreaks` accepts any model that implements `PhraseModel`. Replace `enTitleModel`
+`selectLineBreaks` accepts any model that implements `PhraseModel`. Replace `enTitleModel`
 with an independently trained model, or provide multiple models as `levels` so their
 predictions can be aggregated together.
 
@@ -164,7 +178,7 @@ boundary, the default aggregation stage keeps the lowest penalty.
 This example creates a model that prefers the whitespace boundary after a colon:
 
 ```ts
-import { resolveLineBreaks, type PhraseModel } from "@semantic-wrap/core";
+import { selectLineBreaks, type PhraseModel } from "@semantic-wrap/core";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
@@ -181,7 +195,7 @@ const colonTitleModel: PhraseModel = {
   fallbackPenalty: 1,
 };
 
-const result = resolveLineBreaks({
+const result = selectLineBreaks({
   text: "Design review checklist: what to ask before approval",
   model: colonTitleModel,
   maxWidth: 400,
@@ -223,7 +237,7 @@ const strategy = createLineBreakStrategy({
   select: balance({ tolerance: 0.12 }),
 });
 
-const result = resolveLineBreaks(input, { strategy, diagnostics: true });
+const result = selectLineBreaks(input, { strategy, diagnostics: true });
 ```
 
 Omitted stages use their defaults. `optimalLayouts()` returns the non-dominated,
@@ -242,7 +256,7 @@ rejects candidates that would leave a single word on the last line.
 ```ts
 import {
   createLineBreakStrategy,
-  resolveLineBreaks,
+  selectLineBreaks,
   type LineBreakCalculator,
 } from "@semantic-wrap/core";
 import { enTitleModel } from "@semantic-wrap/en";
@@ -285,10 +299,10 @@ const input = {
   measureText: (value: string) => canvasContext.measureText(value).width,
 };
 
-console.log(resolveLineBreaks(input).lines);
+console.log(selectLineBreaks(input).lines);
 // ["Good metrics guide decisions before", "they become dashboard decoration"]
 
-console.log(resolveLineBreaks(input, { strategy: customStrategy }).lines);
+console.log(selectLineBreaks(input, { strategy: customStrategy }).lines);
 // ["Good metrics guide decisions", "before they become dashboard decoration"]
 ```
 
@@ -297,7 +311,7 @@ console.log(resolveLineBreaks(input, { strategy: customStrategy }).lines);
 Enable diagnostics when tuning aggregation rules or investigating a result.
 
 ```ts
-const result = resolveLineBreaks(input, { diagnostics: true });
+const result = selectLineBreaks(input, { diagnostics: true });
 
 console.log(result.diagnostics.predictions);
 console.log(result.diagnostics.candidates);
@@ -329,7 +343,18 @@ Wrap the styled element when using Chakra UI or Tailwind CSS.
 | `children` | yes | — | One plain-text React element |
 | `model` | yes | — | Phrase model used to create boundary candidates |
 | `strategy` | no | default strategy | Aggregation, calculation, and selection rules |
+| `mode` | no | `"precise"` | `"precise"` waits for the exact first layout; `"progressive"` shows native SSR and activates precise selection on the first viewport or element resize |
 | `ref` | no | — | `HTMLElement` ref shared with the child |
+
+```tsx
+<SemanticWrap mode="progressive" model={enTitleModel}>
+  <h1>{title}</h1>
+</SemanticWrap>
+```
+
+Both modes measure in an invisible DOM copy and synchronously commit the final result from
+the resize observer. The visible element is never cleared or changed to raw text for
+measurement.
 
 #### Chakra UI
 

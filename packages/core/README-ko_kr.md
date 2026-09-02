@@ -11,13 +11,13 @@ dependency-free engine입니다.
 ## 사용 예시
 
 ```ts
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { koTitleModel } from "@semantic-wrap/ko";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const result = resolveLineBreaks({
+const result = selectLineBreaks({
   text: "더 나은 사용자 경험을 만드는 방법",
   model: koTitleModel,
   maxWidth: 320,
@@ -32,8 +32,24 @@ console.log(result.lines);
 사용하세요. 영어와 한국어 프리셋은 `@semantic-wrap/en`과 `@semantic-wrap/ko`에서
 제공합니다.
 
-`resolveLineBreaks`의 필수 입력은 `text`, `model`, `maxWidth`, `measureText`입니다.
+`selectLineBreaks`의 필수 입력은 `text`, `model`, `maxWidth`, `measureText`입니다.
 `nativeLayout`, `strategy`, `diagnostics`는 두 번째 options 인자로 전달합니다.
+
+여러 너비를 반복해서 측정할 때는 lazy plan을 만들어 예측과 집계 결과를 재사용할 수
+있습니다.
+
+```ts
+import { createLineBreakPlan } from "@semantic-wrap/core";
+
+const plan = createLineBreakPlan({ text, model: koTitleModel, strategy });
+const predictions = plan.predict();
+const candidates = plan.aggregate();
+const layouts = plan.calculate({ maxWidth, measureText });
+const selection = plan.select({ maxWidth, measureText, nativeLayout });
+```
+
+뒤 단계를 바로 호출하면 필요한 앞 단계를 자동 실행합니다. 예측과 집계는 immutable
+snapshot으로 캐시하고, 계산과 선택은 measurement마다 다시 실행합니다.
 
 ```ts
 import {
@@ -47,7 +63,7 @@ const strategy = createLineBreakStrategy({
   calculate: greedy(),
 });
 
-const result = resolveLineBreaks(input, {
+const result = selectLineBreaks(input, {
   strategy,
   diagnostics: true,
 });
@@ -61,7 +77,8 @@ layout이 있으면 `balance()`는 줄 수가 같고 모델 비용이 더 낮은
 
 ## 공개 API
 
-- `resolveLineBreaks`
+- `selectLineBreaks`
+- `createLineBreakPlan`
 - `createLineBreakStrategy`
 - `lowestPenalty`, `consensus`
 - `optimalLayouts`, `greedy`
