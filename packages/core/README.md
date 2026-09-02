@@ -11,13 +11,13 @@ This package is ESM-only.
 ## Usage
 
 ```ts
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { enTitleModel } from "@semantic-wrap/en";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const result = resolveLineBreaks({
+const result = selectLineBreaks({
   text: "Write headlines for readers not for internal approval",
   model: enTitleModel,
   maxWidth: 420,
@@ -32,8 +32,23 @@ Use `@semantic-wrap/react` to measure a browser element and render the selected 
 `<br>` elements. Experimental English and Korean presets are available from
 `@semantic-wrap/en` and `@semantic-wrap/ko`.
 
-`resolveLineBreaks` requires `text`, `model`, `maxWidth`, and `measureText`. Pass
+`selectLineBreaks` requires `text`, `model`, `maxWidth`, and `measureText`. Pass
 `nativeLayout`, `strategy`, and `diagnostics` in its optional second argument.
+
+For repeated measurements, create one lazy plan and reuse its prediction and aggregation:
+
+```ts
+import { createLineBreakPlan } from "@semantic-wrap/core";
+
+const plan = createLineBreakPlan({ text, model: enTitleModel, strategy });
+const predictions = plan.predict();
+const candidates = plan.aggregate();
+const layouts = plan.calculate({ maxWidth, measureText });
+const selection = plan.select({ maxWidth, measureText, nativeLayout });
+```
+
+Calling a later method runs its prerequisites automatically. Prediction and aggregation are
+cached as immutable snapshots; calculation and selection run for each measurement.
 
 ## Strategy
 
@@ -59,7 +74,7 @@ const strategy = createLineBreakStrategy({
   select: balance({ tolerance: 0.12 }),
 });
 
-const result = resolveLineBreaks(input, {
+const result = selectLineBreaks(input, {
   strategy,
   diagnostics: true,
 });
@@ -73,7 +88,8 @@ calculated layout; without a native layout, Core selects among calculated layout
 
 ## Public API
 
-- `resolveLineBreaks`
+- `selectLineBreaks`
+- `createLineBreakPlan`
 - `createLineBreakStrategy`
 - `lowestPenalty`, `consensus`
 - `optimalLayouts`, `greedy`

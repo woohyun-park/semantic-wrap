@@ -10,13 +10,13 @@ model입니다.
 ## 사용 예시
 
 ```ts
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { koTitleModel } from "@semantic-wrap/ko";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const result = resolveLineBreaks({
+const result = selectLineBreaks({
   text: "더 나은 사용자 경험을 만드는 방법",
   model: koTitleModel,
   maxWidth: 320,

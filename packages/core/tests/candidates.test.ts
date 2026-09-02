@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { consensus, createLineBreakStrategy, resolveLineBreaks } from "../src/index.js";
+import { consensus, createLineBreakStrategy, selectLineBreaks } from "../src/index.js";
 
 const measureText = (text: string) => text.length;
 
@@ -13,7 +13,7 @@ describe("candidate aggregation", () => {
       ],
       fallbackPenalty: 1,
     } as const;
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "하나 둘 셋 넷", model, maxWidth: 100, measureText },
       { diagnostics: true },
     );
@@ -41,7 +41,7 @@ describe("candidate aggregation", () => {
     const strategy = createLineBreakStrategy({
       aggregate: consensus({ minimumModels: 2 }),
     });
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "하나 둘 셋", model, maxWidth: 100, measureText },
       { strategy, diagnostics: true },
     );
@@ -68,7 +68,7 @@ describe("candidate aggregation", () => {
     ] as const;
 
     for (const [text, offsets] of cases) {
-      const result = resolveLineBreaks(
+      const result = selectLineBreaks(
         { text, model, maxWidth: 100, measureText },
         { diagnostics: true },
       );
@@ -82,26 +82,26 @@ describe("candidate aggregation", () => {
       levels: [{ model: {}, penalty: 0 }],
       fallbackPenalty: 1,
     } as const;
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text: "가😀나", model, maxWidth: 100, measureText },
       { diagnostics: true },
     );
 
     expect(result.diagnostics.candidates.map(({ offset }) => offset)).toEqual([1, 3]);
 
-    const combining = resolveLineBreaks(
+    const combining = selectLineBreaks(
       { text: "e\u0301x", model, maxWidth: 100, measureText },
       { diagnostics: true },
     );
     expect(combining.diagnostics.candidates.map(({ offset }) => offset)).toEqual([2]);
 
-    const family = resolveLineBreaks(
+    const family = selectLineBreaks(
       { text: "👨‍👩‍👧‍👦가", model, maxWidth: 100, measureText },
       { diagnostics: true },
     );
     expect(family.diagnostics.candidates.map(({ offset }) => offset)).toEqual([11]);
 
-    const whitespaceRun = resolveLineBreaks(
+    const whitespaceRun = selectLineBreaks(
       { text: "가  나", model, maxWidth: 100, measureText },
       { diagnostics: true },
     );
@@ -112,7 +112,7 @@ describe("candidate aggregation", () => {
       levels: [{ name: "after-space", model: { UW3: { " ": 100 } }, penalty: 0 }],
       fallbackPenalty: 1,
     } as const;
-    const normalizedPrediction = resolveLineBreaks(
+    const normalizedPrediction = selectLineBreaks(
       { text: "가 나", model: afterWhitespaceModel, maxWidth: 100, measureText },
       { diagnostics: true },
     );
@@ -127,7 +127,7 @@ describe("candidate aggregation", () => {
       levels: [{ model: {}, penalty: 0 }],
       fallbackPenalty: 1,
     } as const;
-    const result = resolveLineBreaks({
+    const result = selectLineBreaks({
       text: " 하나 둘 ",
       model,
       maxWidth: 100,
@@ -145,7 +145,7 @@ describe("candidate aggregation", () => {
     } as const;
 
     expect(() =>
-      resolveLineBreaks({
+      selectLineBreaks({
         text: "하나 둘",
         model: invalidModel,
         maxWidth: 100,
@@ -156,7 +156,7 @@ describe("candidate aggregation", () => {
 
   test("rejects malformed phrase models with clear errors", () => {
     expect(() =>
-      resolveLineBreaks({
+      selectLineBreaks({
         text: "하나 둘",
         model: null as never,
         maxWidth: 100,
@@ -169,7 +169,7 @@ describe("candidate aggregation", () => {
       fallbackPenalty: 1,
     };
     expect(() =>
-      resolveLineBreaks({
+      selectLineBreaks({
         text: "하나 둘",
         model: invalidName as never,
         maxWidth: 100,
@@ -189,7 +189,7 @@ describe("candidate aggregation", () => {
     });
 
     expect(() =>
-      resolveLineBreaks(
+      selectLineBreaks(
         { text: "하나 둘", model, maxWidth: 100, measureText },
         { strategy },
       ),

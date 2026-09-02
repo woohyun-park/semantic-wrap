@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { enTitleModel } from "../src/index.js";
 
 describe("English title model", () => {
@@ -23,7 +23,7 @@ describe("English title model", () => {
 
   test("returns every source-space fallback without inventing word-internal boundaries", () => {
     const text = "Write headlines for readers not for internal approval";
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text, model: enTitleModel, maxWidth: 30, measureText: (value) => value.length },
       { diagnostics: true },
     );
@@ -36,7 +36,7 @@ describe("English title model", () => {
 
   test("keeps the frozen phrase-boundary predictions for a representative title", () => {
     const text = "Write headlines for readers not for internal approval";
-    const result = resolveLineBreaks(
+    const result = selectLineBreaks(
       { text, model: enTitleModel, maxWidth: 30, measureText: (value) => value.length },
       { diagnostics: true },
     );

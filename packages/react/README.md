@@ -9,10 +9,10 @@ elements.
 ## Installation
 
 ```sh
-npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/en react
+npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/en react react-dom
 ```
 
-React 19 or later is required as a peer dependency.
+React and React DOM 19 or later are required as peer dependencies.
 This package is ESM-only.
 
 ## `SemanticWrap`
@@ -30,8 +30,22 @@ export function Title({ children }: { children: string }) {
 }
 ```
 
-`SemanticWrap` preserves its child element and adds no wrapper or CSS. Pass exactly one
-plain-text React element that forwards its ref to an actual `HTMLElement`.
+`SemanticWrap` preserves its child element and adds no wrapper. Pass exactly one plain-text
+React element that forwards its ref to an actual `HTMLElement`.
+
+Precise mode is the default. It keeps the server-rendered text in the HTML but temporarily
+sets the child opacity to zero until the first exact layout is ready. Use progressive mode
+when immediate LCP is more important than semantic wrapping on the first viewport:
+
+```tsx
+<SemanticWrap mode="progressive" model={enTitleModel}>
+  <h1>{title}</h1>
+</SemanticWrap>
+```
+
+Progressive mode renders untouched native text initially and switches permanently to the
+precise pipeline on the first viewport or element resize. Both modes measure native wrapping
+in an invisible copy and synchronously commit only the final result during resize.
 
 ### Chakra UI
 

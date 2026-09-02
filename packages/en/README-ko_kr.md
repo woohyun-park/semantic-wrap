@@ -10,13 +10,13 @@ model입니다.
 ## 사용 예시
 
 ```ts
-import { resolveLineBreaks } from "@semantic-wrap/core";
+import { selectLineBreaks } from "@semantic-wrap/core";
 import { enTitleModel } from "@semantic-wrap/en";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const result = resolveLineBreaks({
+const result = selectLineBreaks({
   text: "Designing products people trust without slowing down delivery",
   model: enTitleModel,
   maxWidth: 420,
