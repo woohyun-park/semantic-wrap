@@ -5,6 +5,7 @@ on:
     branches: [main]
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -25,7 +26,16 @@ jobs:
           bun-version: 1.4.0
       - run: bun install --frozen-lockfile
       - uses: changesets/action/version@v2
+        id: version
         with:
           script: bun run version:packages
           commit-message: "chore: version packages"
           pr-title: "chore: version packages"
+      - name: Run CI for version pull request
+        if: steps.version.outputs.pr-number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_PR: ${{ steps.version.outputs.pr-number }}
+        run: |
+          changeset_ref="$(gh pr view "$VERSION_PR" --json headRefName --jq .headRefName)"
+          gh workflow run ci.yml --ref "$changeset_ref"
