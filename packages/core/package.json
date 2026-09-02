@@ -1,6 +1,6 @@
 {
   "name": "@semantic-wrap/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Woohyun Park",
   "description": "Dependency-free model-driven line-breaking engine.",
   "keywords": ["typography", "line-breaking", "text-wrap", "budoux"],

@@ -1,6 +1,6 @@
 {
   "name": "@semantic-wrap/ko",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Woohyun Park",
   "description": "Experimental Korean title phrase model for semantic-wrap.",
   "keywords": ["korean", "typography", "line-breaking", "budoux"],
@@ -27,7 +27,7 @@
     "pack:check": "bun pm pack --dry-run --ignore-scripts"
   },
   "dependencies": {
-    "@semantic-wrap/core": "^0.1.0"
+    "@semantic-wrap/core": "^0.2.0"
   },
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22" }
