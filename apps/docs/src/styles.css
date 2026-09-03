@@ -228,11 +228,18 @@ input[type="range"]:focus-visible {
   grid-area: nav;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   justify-self: end;
-  gap: var(--space-xl);
+  gap: var(--space-lg);
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.main-nav .locale-link {
+  color: var(--ink-500);
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
 }
 
 .main-nav::-webkit-scrollbar {
@@ -870,9 +877,13 @@ input[type="range"]:focus-visible {
   letter-spacing: -0.055em;
   line-height: 1.28;
   text-align: left;
-  text-wrap: balance;
   word-break: keep-all;
   overflow-wrap: anywhere;
+}
+
+.site-shell[data-locale="ko"] .demo-headline,
+.site-shell[data-locale="ko"] .process-measure-source {
+  text-wrap: balance;
 }
 
 .demo-headline-measure-source {
@@ -1213,7 +1224,6 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 600;
   letter-spacing: -0.035em;
   line-height: 1.45;
-  text-wrap: balance;
   word-break: keep-all;
 }
 

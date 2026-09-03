@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -12,9 +13,14 @@ import {
   SiteHeader,
 } from "./site";
 import { KoreanSemanticWrap } from "./KoreanSemanticWrap";
-import { copyText, repositoryUrl } from "./site-config";
+import { LocalizedSemanticWrap } from "./LocalizedSemanticWrap";
+import {
+  copyText,
+  docsPath,
+  repositoryUrl,
+  type SiteLocale,
+} from "./site-config";
 
-const introductionPath = "/ko/docs/introduction";
 const installCode =
   "npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/ko react react-dom";
 
@@ -209,7 +215,136 @@ import { enTitleModel } from "@semantic-wrap/en";`;
 const developmentCode = `bun install
 bun run check`;
 
-const navigationGroups = [
+const englishInstallCode =
+  "npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/en react react-dom";
+
+const englishReactCode = `import { enTitleModel } from "@semantic-wrap/en";
+import { SemanticWrap } from "@semantic-wrap/react";
+
+export function Title({ children }: { children: string }) {
+  return (
+    <SemanticWrap model={enTitleModel}>
+      <h1 className="title">{children}</h1>
+    </SemanticWrap>
+  );
+}`;
+
+const englishCoreCode = `import { selectLineBreaks } from "@semantic-wrap/core";
+import { enTitleModel } from "@semantic-wrap/en";
+
+const canvas = document.createElement("canvas");
+const canvasContext = canvas.getContext("2d")!;
+canvasContext.font = "700 28px system-ui";
+
+const result = selectLineBreaks({
+  text: "Write headlines for readers not for internal approval",
+  model: enTitleModel,
+  maxWidth: 420,
+  measureText: (text) => canvasContext.measureText(text).width,
+});
+
+console.log(result.lines);
+// ["Write headlines for readers", "not for internal approval"]`;
+
+const englishModelCode = `import {
+  selectLineBreaks,
+  type PhraseModel,
+} from "@semantic-wrap/core";
+
+const canvasContext = document.createElement("canvas").getContext("2d")!;
+canvasContext.font = "700 28px system-ui";
+
+const colonTitleModel: PhraseModel = {
+  boundaryMode: "spaces",
+  levels: [{
+    name: "after-colon",
+    model: { UW3: { ":": 100 } },
+    penalty: 0,
+  }],
+  fallbackPenalty: 1,
+};
+
+const result = selectLineBreaks({
+  text: "Design review checklist: what to ask before approval",
+  model: colonTitleModel,
+  maxWidth: 400,
+  measureText: (value) => canvasContext.measureText(value).width,
+});
+
+console.log(result.lines);
+// ["Design review checklist:", "what to ask before approval"]`;
+
+const englishCustomStrategyCode = customStrategyCode
+  .replaceAll('import { koTitleModel } from "@semantic-wrap/ko";', 'import { enTitleModel } from "@semantic-wrap/en";')
+  .replaceAll("koTitleModel", "enTitleModel")
+  .replaceAll("좋은 사용자 경험을 만들기 위해 놓치지 말아야 할 기준", "Good metrics guide decisions before they become dashboard decoration")
+  .replaceAll('["좋은 사용자 경험을 만들기", "위해 놓치지 말아야 할 기준"]', '["Good metrics guide decisions before", "they become dashboard decoration"]')
+  .replaceAll('["좋은 사용자 경험을 만들기 위해", "놓치지 말아야 할 기준"]', '["Good metrics guide decisions", "before they become dashboard decoration"]');
+
+const englishDiagnosticsCode = `const result = selectLineBreaks(input, { diagnostics: true });
+
+console.log(result.diagnostics.predictions);
+console.log(result.diagnostics.candidates);`;
+
+const englishProgressiveCode = `<SemanticWrap mode="progressive" model={enTitleModel}>
+  <h1>{title}</h1>
+</SemanticWrap>`;
+
+const englishChakraCode = chakraCode
+  .replaceAll('import { koTitleModel } from "@semantic-wrap/ko";', 'import { enTitleModel } from "@semantic-wrap/en";')
+  .replaceAll("koTitleModel", "enTitleModel");
+
+const englishTailwindCode = tailwindCode
+  .replaceAll('import { koTitleModel } from "@semantic-wrap/ko";', 'import { enTitleModel } from "@semantic-wrap/en";')
+  .replaceAll("koTitleModel", "enTitleModel");
+
+const englishHookCode = hookCode
+  .replaceAll('import { koTitleModel } from "@semantic-wrap/ko";', 'import { enTitleModel } from "@semantic-wrap/en";')
+  .replaceAll("koTitleModel", "enTitleModel");
+
+function getNavigationGroups(locale: SiteLocale) {
+  const introductionPath = docsPath(locale);
+  if (locale === "en") return [
+    {
+      label: "Get started",
+      links: [
+        { href: introductionPath, label: "Introduction" },
+        { href: `${introductionPath}#examples`, label: "Examples" },
+        { href: `${introductionPath}#quick-start`, label: "Quick start" },
+        { href: `${introductionPath}#how-it-works`, label: "How it works" },
+        { href: `${introductionPath}#packages`, label: "Packages" },
+      ],
+    },
+    {
+      label: "@semantic-wrap/core",
+      links: [
+        { href: `${introductionPath}#core-api`, label: "selectLineBreaks" },
+        { href: `${introductionPath}#line-break-plan`, label: "createLineBreakPlan" },
+        { href: `${introductionPath}#custom-models`, label: "Custom models" },
+        { href: `${introductionPath}#strategies`, label: "Strategies" },
+        { href: `${introductionPath}#diagnostics`, label: "Diagnostics" },
+      ],
+    },
+    {
+      label: "@semantic-wrap/react",
+      links: [
+        { href: `${introductionPath}#semantic-wrap`, label: "<SemanticWrap />" },
+        { href: `${introductionPath}#chakra-ui`, label: "Chakra UI" },
+        { href: `${introductionPath}#tailwind-css`, label: "Tailwind CSS" },
+        { href: `${introductionPath}#use-semantic-wrap`, label: "useSemanticWrap" },
+      ],
+    },
+    {
+      label: "Models and project",
+      links: [
+        { href: `${introductionPath}#models`, label: "English and Korean presets" },
+        { href: `${introductionPath}#development`, label: "Development" },
+        { href: `${introductionPath}#license`, label: "License" },
+      ],
+    },
+  ];
+
+  return [
   {
     label: "시작하기",
     links: [
@@ -247,11 +382,15 @@ const navigationGroups = [
       { href: `${introductionPath}#license`, label: "라이선스" },
     ],
   },
-];
+  ];
+}
 
-const navigationLinks = navigationGroups.flatMap((group) => group.links);
-
-function useActiveDocsHref() {
+function useActiveDocsHref(locale: SiteLocale) {
+  const introductionPath = docsPath(locale);
+  const navigationLinks = useMemo(
+    () => getNavigationGroups(locale).flatMap((group) => group.links),
+    [locale],
+  );
   const navigationTargetIdRef = useRef<string | null>(null);
   const [activeHref, setActiveHref] = useState(() => {
     const candidate = `${introductionPath}${window.location.hash}`;
@@ -338,7 +477,7 @@ function useActiveDocsHref() {
       window.removeEventListener("popstate", syncHistoryNavigation);
       if (animationFrame !== 0) window.cancelAnimationFrame(animationFrame);
     };
-  }, []);
+  }, [introductionPath, navigationLinks]);
 
   const navigateToHref = useCallback((href: string, targetId: string) => {
     navigationTargetIdRef.current = targetId;
@@ -352,11 +491,13 @@ function DocsNavigation({
   activeHref,
   centerActive = false,
   label,
+  locale,
   onNavigate,
 }: {
   activeHref: string;
   centerActive?: boolean;
   label: string;
+  locale: SiteLocale;
   onNavigate: (href: string, targetId: string) => void;
 }) {
   const navRef = useRef<HTMLElement>(null);
@@ -432,7 +573,7 @@ function DocsNavigation({
 
   return (
     <nav className="docs-side-nav" aria-label={label} ref={navRef}>
-      {navigationGroups.map((group) => (
+      {getNavigationGroups(locale).map((group) => (
         <div className="docs-nav-group" key={group.label}>
           <h2>{group.label}</h2>
           <ul>
@@ -499,10 +640,12 @@ function CodeBlock({
   label,
   language,
   children,
+  locale = "ko",
 }: {
   label: string;
   language: "sh" | "ts" | "tsx";
   children: string;
+  locale?: SiteLocale;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -520,9 +663,13 @@ function CodeBlock({
     <div className="docs-code-block">
       <div className="docs-code-head">
         <span>{label}</span>
-        <button type="button" onClick={copyCode} aria-label={`${label} 코드 복사`}>
+        <button
+          type="button"
+          onClick={copyCode}
+          aria-label={locale === "ko" ? `${label} 코드 복사` : `Copy code from ${label}`}
+        >
           <CopyIcon />
-          <span aria-live="polite">{copied ? "복사됨" : "복사"}</span>
+          <span aria-live="polite">{copied ? locale === "ko" ? "복사됨" : "Copied" : locale === "ko" ? "복사" : "Copy"}</span>
         </button>
       </div>
       <pre><code className={`language-${language}`}>{renderHighlightedCode(children)}</code></pre>
@@ -538,29 +685,35 @@ function DocsSection({
   children,
   id,
   index,
+  locale = "ko",
   title,
 }: {
   children: ReactNode;
   id: string;
   index: string;
+  locale?: SiteLocale;
   title: ReactNode;
 }) {
   const heading = <h2 id={`${id}-title`}>{title}</h2>;
-  const isPlainKoreanTitle =
-    typeof title === "string" && /[\uac00-\ud7a3]/u.test(title);
+  const isPlainTitle = typeof title === "string";
 
   return (
     <section className="docs-section docs-anchor" id={id} aria-labelledby={`${id}-title`}>
       <p className="docs-section-index">{index}</p>
-      {isPlainKoreanTitle ? (
-        <KoreanSemanticWrap>{heading}</KoreanSemanticWrap>
+      {isPlainTitle ? (
+        locale === "ko" ? <KoreanSemanticWrap>{heading}</KoreanSemanticWrap> : (
+          <LocalizedSemanticWrap locale={locale}>{heading}</LocalizedSemanticWrap>
+        )
       ) : heading}
       {children}
     </section>
   );
 }
 
-function DocsSubheading({ children }: { children: string }) {
+function DocsSubheading({ children, locale = "ko" }: { children: string; locale?: SiteLocale }) {
+  if (locale === "en") {
+    return <LocalizedSemanticWrap locale="en"><h3>{children}</h3></LocalizedSemanticWrap>;
+  }
   return (
     <KoreanSemanticWrap>
       <h3>{children}</h3>
@@ -569,6 +722,7 @@ function DocsSubheading({ children }: { children: string }) {
 }
 
 function IntroductionArticle() {
+  const introductionPath = docsPath("ko");
   return (
     <article className="docs-article">
       <div className="docs-article-tools">
@@ -815,22 +969,270 @@ function IntroductionArticle() {
   );
 }
 
-export function DocsApp() {
-  const { activeHref, navigateToHref } = useActiveDocsHref();
-  const activeLabel = navigationLinks.find((link) => link.href === activeHref)?.label ?? "semantic-wrap 소개";
+function EnglishIntroductionArticle() {
+  const introductionPath = docsPath("en");
+  return (
+    <article className="docs-article">
+      <div className="docs-article-tools">
+        <p><a href={introductionPath}>Docs</a><span>/</span>Introduction</p>
+        <a href={`${repositoryUrl}/blob/main/README.md`} target="_blank" rel="noreferrer">
+          View source on GitHub <span aria-hidden="true">↗</span>
+        </a>
+      </div>
 
-  useEffect(() => {
-    document.title = "semantic-wrap 소개 | 문서";
-  }, []);
+      <header className="docs-article-header" id="overview">
+        <p className="docs-kicker">Introduction</p>
+        <h1>What is <span>semantic-wrap</span>?</h1>
+        <p className="docs-lead">
+          A language-independent JavaScript library that selects line breaks from a trained
+          model and the actual rendered layout. It inserts <code>&lt;br&gt;</code> only when the
+          calculated result is better.
+        </p>
+        <p className="docs-overview-copy">
+          Both the phrase model and the selection strategy are replaceable. Experimental
+          presets are available for English and Korean titles, while Core remains independent
+          of any language, rendering environment, or UI framework.
+        </p>
+        <div className="docs-version-line"><span>ESM only</span><span>React 19+</span><span>Node.js 22+</span></div>
+      </header>
+
+      <DocsSection id="examples" index="01" locale="en" title="Examples">
+        <p>Compare native wrapping based on width alone with results that preserve model-predicted phrase boundaries.</p>
+        <DocsTable><table>
+          <caption>Browser-native and semantic-wrap results</caption>
+          <thead><tr><th>Browser native wrapping</th><th>semantic-wrap</th></tr></thead>
+          <tbody>
+            <tr><td>Strong teams disagree openly while<br />keeping the shared goal visible</td><td>Strong teams disagree openly<br />while keeping the shared goal visible</td></tr>
+            <tr><td>Before adding another feature,<br />understand the behavior it should change</td><td>Before adding another feature,<br />understand the behavior<br />it should change</td></tr>
+            <tr><td>The best design systems create consistency<br />without blocking local needs</td><td>The best design systems<br />create consistency without blocking local needs</td></tr>
+            <tr><td>Security decisions work better when<br />they begin during product design</td><td>Security decisions work better<br />when they begin during product design</td></tr>
+          </tbody>
+        </table></DocsTable>
+        <aside className="docs-note"><strong>Scope</strong><p>semantic-wrap is tuned for short display titles and headings, not automatic typesetting of long body copy.</p></aside>
+      </DocsSection>
+
+      <DocsSection id="quick-start" index="02" locale="en" title="Quick start">
+        <DocsSubheading locale="en">Install</DocsSubheading>
+        <p>Install Core, the React adapter, and the English preset to use semantic-wrap in React.</p>
+        <CodeBlock label="Terminal" language="sh" locale="en">{englishInstallCode}</CodeBlock>
+        <p><code>@semantic-wrap/react</code> requires React and React DOM 19 or later. Core-only and model-only projects do not need React. All packages are ESM-only.</p>
+        <DocsSubheading locale="en">Use it in React</DocsSubheading>
+        <CodeBlock label="Title.tsx" language="tsx" locale="en">{englishReactCode}</CodeBlock>
+        <p><code>SemanticWrap</code> preserves its child element and adds no wrapper. Precise mode keeps SSR text in HTML and reveals the exact first selection when ready. Progressive mode leaves the initial SSR text untouched and starts precise selection on the first viewport or element resize.</p>
+      </DocsSection>
+
+      <DocsSection id="how-it-works" index="03" locale="en" title="How it works">
+        <ol className="docs-pipeline">
+          <li><span>01</span><div><strong>Predict and aggregate</strong><p>A phrase model predicts candidate boundaries and assigns a cost to each one.</p></div></li>
+          <li><span>02</span><div><strong>Calculate layouts</strong><p>Core measures multiple candidates with the actual font and available width.</p></div></li>
+          <li><span>03</span><div><strong>Verify in the browser</strong><p>A fitting native layout is replaced only when the model provides stronger evidence.</p></div></li>
+          <li><span>04</span><div><strong>Select and render</strong><p>Visual balance chooses the final result; React renders <code>&lt;br&gt;</code> only when a calculated layout wins.</p></div></li>
+        </ol>
+        <p>The React package measures again when the element resizes, its class or inline style changes, or web fonts finish loading.</p>
+      </DocsSection>
+
+      <DocsSection id="packages" index="04" locale="en" title="Packages">
+        <DocsTable><table>
+          <caption>semantic-wrap packages and responsibilities</caption>
+          <thead><tr><th>Package</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>@semantic-wrap/core</code></td><td>Boundary prediction, candidate aggregation, layout calculation, and selection</td></tr>
+            <tr><td><code>@semantic-wrap/react</code></td><td>DOM measurement and <code>&lt;br&gt;</code> rendering for React</td></tr>
+            <tr><td><code>@semantic-wrap/en</code></td><td>Experimental phrase model for English titles</td></tr>
+            <tr><td><code>@semantic-wrap/ko</code></td><td>Experimental phrase model for Korean titles</td></tr>
+          </tbody>
+        </table></DocsTable>
+      </DocsSection>
+
+      <DocsSection id="core-api" index="Core 01" locale="en" title={<code>selectLineBreaks</code>}>
+        <p><code>selectLineBreaks</code> runs the complete prediction-to-selection pipeline without depending on React or the DOM.</p>
+        <CodeBlock label="line-breaks.ts" language="ts" locale="en">{englishCoreCode}</CodeBlock>
+        <DocsSubheading locale="en">Required input</DocsSubheading>
+        <DocsTable><table>
+          <caption>selectLineBreaks input</caption>
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>text</code></td><td><code>string</code></td><td>Source text to wrap</td></tr>
+            <tr><td><code>model</code></td><td><code>PhraseModel</code></td><td>Model that predicts boundaries and priorities</td></tr>
+            <tr><td><code>maxWidth</code></td><td><code>number</code></td><td>Maximum width available to one line</td></tr>
+            <tr><td><code>measureText</code></td><td><code>(text: string) =&gt; number</code></td><td>Measures a string with the target font</td></tr>
+          </tbody>
+        </table></DocsTable>
+        <DocsSubheading locale="en">Options</DocsSubheading>
+        <DocsTable><table>
+          <caption>selectLineBreaks options</caption>
+          <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>nativeLayout</code></td><td><code>BaselineLayout</code></td><td>none</td><td>Existing line breaks as ascending UTF-16 offsets</td></tr>
+            <tr><td><code>strategy</code></td><td><code>LineBreakStrategy</code></td><td>default strategy</td><td>Overrides aggregation, calculation, or selection</td></tr>
+            <tr><td><code>diagnostics</code></td><td><code>boolean</code></td><td><code>false</code></td><td>Includes intermediate pipeline results</td></tr>
+          </tbody>
+        </table></DocsTable>
+        <p>When <code>nativeLayout</code> is present, Core evaluates it with the calculated candidates. The default selector may replace an overflowing native layout with any fitting result. Otherwise, replacement requires the same line count and a lower <code>modelCost</code>.</p>
+        <h3>Output: <code>LineBreakSelection</code></h3>
+        <DocsTable><table>
+          <caption>LineBreakSelection output</caption>
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>text</code></td><td><code>string</code></td><td>Original input text</td></tr>
+            <tr><td><code>lines</code></td><td><code>string[]</code></td><td>Text split at selected boundaries</td></tr>
+            <tr><td><code>breaks</code></td><td><code>number[]</code></td><td>Ascending UTF-16 offsets for line ends</td></tr>
+            <tr><td><code>widths</code></td><td><code>number[]</code></td><td>Measured width of each line</td></tr>
+            <tr><td><code>selectedCandidates</code></td><td><code>BreakCandidate[]</code></td><td>Model candidates used by the selected layout</td></tr>
+            <tr><td><code>applied</code></td><td><code>boolean</code></td><td>Whether calculated breaks should render</td></tr>
+            <tr><td><code>reason</code></td><td><code>string</code></td><td>Reason returned by selection</td></tr>
+            <tr><td><code>overflow</code></td><td><code>boolean</code></td><td>Whether a selected line exceeds maxWidth</td></tr>
+            <tr><td><code>diagnostics</code></td><td><code>LineBreakDiagnostics</code></td><td>Present only when diagnostics are enabled</td></tr>
+          </tbody>
+        </table></DocsTable>
+      </DocsSection>
+
+      <DocsSection id="line-break-plan" index="Core 02" locale="en" title={<code>createLineBreakPlan</code>}>
+        <p>Create a lazy plan when the same text, model, and strategy will be measured at multiple widths.</p>
+        <CodeBlock label="line-break-plan.ts" language="ts" locale="en">{planCode}</CodeBlock>
+        <p>Calling a later stage runs its prerequisites. Prediction and aggregation are cached as immutable snapshots; calculation and selection run for every measurement.</p>
+      </DocsSection>
+
+      <DocsSection id="custom-models" index="Core 03" locale="en" title="Custom phrase models">
+        <p>Any model that implements <code>PhraseModel</code> can replace the preset. Multiple model levels can also be aggregated together.</p>
+        <DocsTable><table>
+          <caption>PhraseModel fields</caption>
+          <thead><tr><th>Field</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>levels</code></td><td>yes</td><td>—</td><td>One or more models and their relative penalties</td></tr>
+            <tr><td><code>fallbackPenalty</code></td><td>yes</td><td>—</td><td>Cost of an allowed boundary not predicted by a level</td></tr>
+            <tr><td><code>boundaryMode</code></td><td>no</td><td><code>spaces</code></td><td>Whitespace or Unicode grapheme boundaries</td></tr>
+          </tbody>
+        </table></DocsTable>
+        <p>Lower penalties are preferred. When multiple levels predict the same boundary, the default aggregation stage keeps the lowest penalty.</p>
+        <CodeBlock label="colon-model.ts" language="ts" locale="en">{englishModelCode}</CodeBlock>
+        <p><code>UW3</code> is the BudouX feature for the character immediately before a boundary. The value <code>100</code> is a feature weight, not a probability.</p>
+      </DocsSection>
+
+      <DocsSection id="strategies" index="Core 04" locale="en" title="Strategies">
+        <p>The default strategy has three independently replaceable stages.</p>
+        <DocsTable><table>
+          <caption>Strategy stages</caption>
+          <thead><tr><th>Stage</th><th>Default</th><th>Customization examples</th></tr></thead>
+          <tbody>
+            <tr><td><code>aggregate</code></td><td><code>lowestPenalty()</code></td><td>Require model agreement with <code>consensus()</code></td></tr>
+            <tr><td><code>calculate</code></td><td><code>optimalLayouts()</code></td><td>Use <code>greedy()</code> or custom line-count rules</td></tr>
+            <tr><td><code>select</code></td><td><code>balance()</code></td><td>Apply product-specific scores and replacement rules</td></tr>
+          </tbody>
+        </table></DocsTable>
+        <CodeBlock label="strategy.ts" language="ts" locale="en">{strategyCode}</CodeBlock>
+        <p><code>optimalLayouts()</code> returns non-dominated, minimum-line candidates across visual balance and model cost. <code>balance()</code> uses a default tolerance of <code>0.12</code>, requires lower model cost before replacing a fitting native layout, and allows any fitting candidate when native overflows.</p>
+        <DocsSubheading locale="en">Replace the calculation stage</DocsSubheading>
+        <p>This example still creates a two-line title but rejects candidates that leave one word on the last line.</p>
+        <CodeBlock label="two-line-title.ts" language="ts" locale="en">{englishCustomStrategyCode}</CodeBlock>
+      </DocsSection>
+
+      <DocsSection id="diagnostics" index="Core 05" locale="en" title="Diagnostics">
+        <p>Enable diagnostics when tuning aggregation rules or investigating a result.</p>
+        <CodeBlock label="diagnostics.ts" language="ts" locale="en">{englishDiagnosticsCode}</CodeBlock>
+        <DocsTable><table>
+          <caption>Diagnostics fields</caption>
+          <thead><tr><th>Field</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>predictions</code></td><td>Raw boundaries predicted by each model level</td></tr>
+            <tr><td><code>candidates</code></td><td>One candidate list produced by aggregate</td></tr>
+            <tr><td><code>calculatedLayouts</code></td><td>Measured candidates with line count, balance, model cost, and overflow</td></tr>
+            <tr><td><code>nativeLayout</code></td><td>Measured browser layout when supplied</td></tr>
+            <tr><td><code>selection</code></td><td>Source, index, and reason returned by select</td></tr>
+          </tbody>
+        </table></DocsTable>
+        <p>The default selector returns <code>native-no-model-improvement</code> when no calculated layout lowers model cost. Other defaults are <code>native-selected</code> and <code>calculated-selected</code>.</p>
+      </DocsSection>
+
+      <DocsSection id="semantic-wrap" index="React 01" locale="en" title={<code>&lt;SemanticWrap /&gt;</code>}>
+        <p>Wrap one plain-text React element that forwards its ref to an actual <code>HTMLElement</code>. The component measures the rendered font and width, then applies the Core selection without adding another element.</p>
+        <DocsTable><table>
+          <caption>SemanticWrap props</caption>
+          <thead><tr><th>Prop</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>children</code></td><td>yes</td><td>—</td><td>One plain-text React element</td></tr>
+            <tr><td><code>model</code></td><td>yes</td><td>—</td><td>Phrase model used to create candidates</td></tr>
+            <tr><td><code>strategy</code></td><td>no</td><td>default strategy</td><td>Aggregation, calculation, and selection rules</td></tr>
+            <tr><td><code>mode</code></td><td>no</td><td><code>precise</code></td><td><code>precise</code> or <code>progressive</code> measurement</td></tr>
+            <tr><td><code>ref</code></td><td>no</td><td>—</td><td>HTMLElement ref shared with the child</td></tr>
+          </tbody>
+        </table></DocsTable>
+        <CodeBlock label="progressive.tsx" language="tsx" locale="en">{englishProgressiveCode}</CodeBlock>
+        <p>Both modes measure in an invisible DOM copy and synchronously commit the final result from the resize observer. The visible element is never cleared or reset to raw text for measurement.</p>
+        <aside className="docs-note is-caution"><strong>Plain text only</strong><p>For nested markup with different typography, use <code>useSemanticWrap</code> or Core with a matching <code>measureText</code> implementation.</p></aside>
+      </DocsSection>
+
+      <DocsSection id="chakra-ui" index="React 02" locale="en" title="Chakra UI">
+        <p>Components that forward their ref to a real HTMLElement work in the same way.</p>
+        <CodeBlock label="ChakraTitle.tsx" language="tsx" locale="en">{englishChakraCode}</CodeBlock>
+      </DocsSection>
+
+      <DocsSection id="tailwind-css" index="React 03" locale="en" title="Tailwind CSS">
+        <p>Classes on a plain-text element remain unchanged.</p>
+        <CodeBlock label="TailwindTitle.tsx" language="tsx" locale="en">{englishTailwindCode}</CodeBlock>
+      </DocsSection>
+
+      <DocsSection id="use-semantic-wrap" index="React 04" locale="en" title={<code>useSemanticWrap</code>}>
+        <p>Use the lower-level hook to render selected lines yourself or inspect diagnostics. It measures with the target element&apos;s computed text style and does not alter the target&apos;s children or CSS.</p>
+        <DocsTable><table>
+          <caption>useSemanticWrap options</caption>
+          <thead><tr><th>Field</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>text</code></td><td>yes</td><td>—</td><td>Source text to measure and split</td></tr>
+            <tr><td><code>model</code></td><td>yes</td><td>—</td><td>Phrase model used to create candidates</td></tr>
+            <tr><td><code>strategy</code></td><td>no</td><td>default strategy</td><td>Aggregation, calculation, and selection rules</td></tr>
+            <tr><td><code>diagnostics</code></td><td>no</td><td><code>false</code></td><td>Whether to return intermediate results</td></tr>
+          </tbody>
+        </table></DocsTable>
+        <CodeBlock label="BreakPreview.tsx" language="tsx" locale="en">{englishHookCode}</CodeBlock>
+        <h3>Output: <code>UseSemanticWrapResult</code></h3>
+        <DocsTable><table>
+          <caption>useSemanticWrap output</caption>
+          <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>ref</code></td><td><code>(HTMLElement | null) =&gt; void</code></td><td>Callback ref for the measured element</td></tr>
+            <tr><td><code>selection</code></td><td><code>LineBreakSelection | null</code></td><td>Selected result after measurement</td></tr>
+            <tr><td><code>diagnostics</code></td><td><code>LineBreakDiagnostics | null</code></td><td>Diagnostics after measurement when requested</td></tr>
+          </tbody>
+        </table></DocsTable>
+      </DocsSection>
+
+      <DocsSection id="models" index="Models" locale="en" title="English and Korean presets">
+        <p>Use <code>enTitleModel</code> for English titles and <code>koTitleModel</code> for Korean titles. Both models create candidates only at whitespace boundaries.</p>
+        <CodeBlock label="models.ts" language="ts" locale="en">{modelImportCode}</CodeBlock>
+        <aside className="docs-note is-caution"><strong>Experimental presets</strong><p>Both presets were trained on small title datasets. Before production use, train and validate against a large dataset that represents your fonts, widths, and content. See the <a href={`${repositoryUrl}/blob/main/packages/en/MODEL_CARD.md`}>English Model Card</a> and <a href={`${repositoryUrl}/blob/main/packages/ko/MODEL_CARD.md`}>Korean Model Card</a>.</p></aside>
+      </DocsSection>
+
+      <DocsSection id="development" index="Project 01" locale="en" title="Development">
+        <CodeBlock label="Terminal" language="sh" locale="en">{developmentCode}</CodeBlock>
+        <p><code>bun run check</code> runs type checking, unit tests, the build, Chromium, Firefox, and WebKit browser tests, and npm package validation.</p>
+      </DocsSection>
+
+      <DocsSection id="license" index="Project 02" locale="en" title="License">
+        <p>Apache-2.0. <code>@semantic-wrap/core</code> includes a modified, dependency-free implementation of the Google BudouX parser. See <a href={`${repositoryUrl}/blob/main/NOTICE`}>NOTICE</a> for details.</p>
+      </DocsSection>
+    </article>
+  );
+}
+
+export function DocsApp({ locale }: { locale: SiteLocale }) {
+  const navigationGroups = getNavigationGroups(locale);
+  const navigationLinks = navigationGroups.flatMap((group) => group.links);
+  const { activeHref, navigateToHref } = useActiveDocsHref(locale);
+  const activeLabel = navigationLinks.find((link) => link.href === activeHref)?.label
+    ?? (locale === "ko" ? "semantic-wrap 소개" : "Introduction");
+  const copy = locale === "ko"
+    ? { skip: "본문으로 바로가기", explore: "문서 탐색", mobile: "모바일 문서 메뉴", menu: "문서 메뉴" }
+    : { skip: "Skip to content", explore: "Explore docs", mobile: "Mobile documentation menu", menu: "Documentation menu" };
 
   return (
     <div className="docs-page">
-      <a className="skip-link" href="#main-content">본문으로 바로가기</a>
-      <SiteHeader current="docs" />
+      <a className="skip-link" href="#main-content">{copy.skip}</a>
+      <SiteHeader current="docs" locale={locale} />
       <div className="docs-mobile-index docs-width">
         <details>
-          <summary><span>문서 탐색</span><strong>{activeLabel}</strong></summary>
-          <DocsNavigation activeHref={activeHref} label="모바일 문서 메뉴" onNavigate={navigateToHref} />
+          <summary><span>{copy.explore}</span><strong>{activeLabel}</strong></summary>
+          <DocsNavigation activeHref={activeHref} label={copy.mobile} locale={locale} onNavigate={navigateToHref} />
         </details>
       </div>
       <main className="docs-grid docs-width" id="main-content">
@@ -838,11 +1240,12 @@ export function DocsApp() {
           <DocsNavigation
             activeHref={activeHref}
             centerActive
-            label="문서 메뉴"
+            label={copy.menu}
+            locale={locale}
             onNavigate={navigateToHref}
           />
         </aside>
-        <IntroductionArticle />
+        {locale === "ko" ? <IntroductionArticle /> : <EnglishIntroductionArticle />}
       </main>
       <SiteFooter />
     </div>

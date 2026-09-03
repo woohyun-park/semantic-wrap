@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import brandMarkUrl from "./brand-mark.png";
-import { repositoryUrl, siteVersion } from "./site-config";
+import {
+  alternateLocalePath,
+  docsPath,
+  landingPath,
+  repositoryUrl,
+  siteVersion,
+  type SiteLocale,
+} from "./site-config";
 
 export function ArrowIcon() {
   return (
@@ -70,9 +77,11 @@ export function BrandLockup({ className }: { className?: string }) {
 export function SiteHeader({
   current,
   hideBrandWhile,
+  locale,
 }: {
   current?: "docs";
   hideBrandWhile?: string;
+  locale: SiteLocale;
 }) {
   const [isBrandHidden, setIsBrandHidden] = useState(Boolean(hideBrandWhile));
 
@@ -96,24 +105,32 @@ export function SiteHeader({
     return () => observer.disconnect();
   }, [hideBrandWhile]);
 
+  const alternateHref = `${alternateLocalePath(window.location.pathname, locale)}${current ? window.location.hash : ""}`;
+  const copy = locale === "ko"
+    ? { docs: "문서", github: "GitHub 저장소", home: "semantic-wrap 홈", nav: "주요 메뉴", switch: "EN" }
+    : { docs: "Docs", github: "GitHub repository", home: "semantic-wrap home", nav: "Primary navigation", switch: "한국어" };
+
   return (
     <header className={`site-header${isBrandHidden ? " is-hero-brand-visible" : ""}`}>
       <div className="site-header-inner page-width">
         <a
           className="brand-link"
-          href="/"
-          aria-label="semantic-wrap 홈"
+          href={landingPath(locale)}
+          aria-label={copy.home}
           aria-hidden={isBrandHidden}
           tabIndex={isBrandHidden ? -1 : undefined}
         >
           <BrandLockup />
         </a>
-        <nav className="main-nav" aria-label="주요 메뉴">
+        <nav className="main-nav" aria-label={copy.nav}>
           <a
-            href="/ko/docs/introduction"
+            href={docsPath(locale)}
             aria-current={current === "docs" ? "page" : undefined}
           >
-            문서
+            {copy.docs}
+          </a>
+          <a className="locale-link" href={alternateHref} hrefLang={locale === "ko" ? "en" : "ko"}>
+            {copy.switch}
           </a>
         </nav>
         <a
@@ -121,7 +138,7 @@ export function SiteHeader({
           href={repositoryUrl}
           target="_blank"
           rel="noreferrer"
-          aria-label="GitHub 저장소"
+          aria-label={copy.github}
         >
           <GitHubIcon />
         </a>

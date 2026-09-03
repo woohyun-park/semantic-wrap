@@ -2,6 +2,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -20,7 +21,11 @@ import {
   easeOutQuint,
   headlineLayoutTransition,
 } from "./motion-values";
-import { lineBreakExamples, type LineBreakExample } from "./landing-content";
+import {
+  landingContent,
+  type LandingContent,
+  type LineBreakExample,
+} from "./landing-content";
 import { SceneFrame, ShimmerText } from "./motion";
 import {
   ArrowIcon,
@@ -28,10 +33,7 @@ import {
   CheckIcon,
   CopyIcon,
 } from "./site";
-import { copyText } from "./site-config";
-
-const installCommand =
-  "npm i @semantic-wrap/react @semantic-wrap/ko";
+import { copyText, docsPath, type SiteLocale } from "./site-config";
 
 type MessagePhase = "blank" | "source" | "complete";
 type SceneContent =
@@ -44,10 +46,11 @@ type IntroScene = SceneContent & {
   shimmerAt?: number;
 };
 
-const introScenes: readonly IntroScene[] = [
-  { id: "hero", kind: "hero", weight: 1 },
-  { id: "message", kind: "message", weight: 2.2, shimmerAt: 0.7 },
-  ...lineBreakExamples.flatMap<IntroScene>((example, exampleIndex) => [
+function buildIntroScenes(examples: readonly LineBreakExample[]): readonly IntroScene[] {
+  return [
+    { id: "hero", kind: "hero", weight: 1 },
+    { id: "message", kind: "message", weight: 2.2, shimmerAt: 0.7 },
+    ...examples.flatMap<IntroScene>((example, exampleIndex) => [
     {
       id: `${example.id}-before`,
       kind: "headline",
@@ -63,18 +66,22 @@ const introScenes: readonly IntroScene[] = [
       weight: 1.7,
       shimmerAt: 0.45,
     },
-  ]),
-];
+    ]),
+  ];
+}
 
-const timelineUnits = introScenes.reduce((total, scene) => total + scene.weight, 0);
 const shimmerResetAt = 0.15;
 
-function resolveTimeline(progress: number) {
+function resolveTimeline(
+  progress: number,
+  scenes: readonly IntroScene[],
+  timelineUnits: number,
+) {
   const scaledProgress = Math.min(1, Math.max(0, progress)) * timelineUnits;
   let sceneStart = 0;
 
-  for (const [sceneIndex, scene] of introScenes.entries()) {
-    const isLast = sceneIndex === introScenes.length - 1;
+  for (const [sceneIndex, scene] of scenes.entries()) {
+    const isLast = sceneIndex === scenes.length - 1;
     if (scaledProgress < sceneStart + scene.weight || isLast) {
       return {
         scene,
@@ -86,7 +93,7 @@ function resolveTimeline(progress: number) {
     sceneStart += scene.weight;
   }
 
-  return { scene: introScenes[0]!, sceneIndex: 0, scaledProgress: 0, sceneProgress: 0 };
+  return { scene: scenes[0]!, sceneIndex: 0, scaledProgress: 0, sceneProgress: 0 };
 }
 
 function messagePhase(scene: IntroScene, progress: number): MessagePhase | null {
@@ -103,7 +110,11 @@ type Playback = {
   shimmerRun: number | null;
 };
 
-function useIntroTimeline(storyRef: RefObject<HTMLElement | null>) {
+function useIntroTimeline(
+  storyRef: RefObject<HTMLElement | null>,
+  scenes: readonly IntroScene[],
+  timelineUnits: number,
+) {
   const shouldReduceMotion = Boolean(useReducedMotion());
   const { scrollYProgress } = useScroll({
     target: storyRef,
@@ -123,7 +134,7 @@ function useIntroTimeline(storyRef: RefObject<HTMLElement | null>) {
     if (shouldReduceMotion) return;
 
     const previous = cursor.current;
-    const next = resolveTimeline(progress);
+    const next = resolveTimeline(progress, scenes, timelineUnits);
     const sceneChanged = next.sceneIndex !== previous.sceneIndex;
     const movingForward = next.scaledProgress > previous.scaledProgress;
     const usesShimmer = next.scene.shimmerAt !== undefined;
@@ -182,7 +193,7 @@ function useIntroTimeline(storyRef: RefObject<HTMLElement | null>) {
         ? current
         : updated;
     });
-  }, [shouldReduceMotion]);
+  }, [scenes, shouldReduceMotion, timelineUnits]);
 
   useMotionValueEvent(scrollYProgress, "change", syncProgress);
 
@@ -193,7 +204,7 @@ function useIntroTimeline(storyRef: RefObject<HTMLElement | null>) {
   const markLayoutComplete = useCallback((sceneIndex: number) => {
     if (cursor.current.sceneIndex !== sceneIndex) return;
 
-    const scene = introScenes[sceneIndex];
+    const scene = scenes[sceneIndex];
     const gate = shimmer.current;
     if (!scene || scene.shimmerAt === undefined) return;
 
@@ -204,7 +215,7 @@ function useIntroTimeline(storyRef: RefObject<HTMLElement | null>) {
     gate.armed = false;
     gate.run = ++runCount.current;
     setPlayback((current) => ({ ...current, shimmerRun: gate.run }));
-  }, []);
+  }, [scenes]);
 
   return { markLayoutComplete, playback, shouldReduceMotion };
 }
@@ -220,15 +231,15 @@ function resetActionSpotlight(event: ReactPointerEvent<HTMLAnchorElement>) {
   event.currentTarget.style.setProperty("--action-y", "50%");
 }
 
-function StartAction() {
+function StartAction({ content, locale }: { content: LandingContent; locale: SiteLocale }) {
   return (
     <a
       className="primary-action"
-      href="/ko/docs/introduction"
+      href={docsPath(locale)}
       onPointerMove={moveActionSpotlight}
       onPointerLeave={resetActionSpotlight}
     >
-      <span>시작하기</span>
+      <span>{content.intro.start}</span>
       <span className="action-arrow" aria-hidden="true">
         <ArrowIcon />
         <ArrowIcon />
@@ -237,7 +248,7 @@ function StartAction() {
   );
 }
 
-function InstallCommand() {
+function InstallCommand({ content }: { content: LandingContent }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   useEffect(() => {
@@ -247,22 +258,22 @@ function InstallCommand() {
   }, [copyState]);
 
   async function copyCommand() {
-    const copied = await copyText(installCommand);
+    const copied = await copyText(content.intro.installCommand);
     setCopyState(copied ? "copied" : "failed");
   }
 
-  const copyLabel = copyState === "copied" ? "복사됨" : "복사하지 못했습니다";
+  const copyLabel = copyState === "copied" ? content.intro.copied : content.intro.copyFailed;
 
   return (
     <motion.button
       type="button"
       className={`quick-install${copyState === "idle" ? "" : ` is-${copyState}`}`}
       onClick={copyCommand}
-      aria-label="npm 설치 명령 복사"
+      aria-label={content.intro.copy}
       animate={copyState === "copied" ? { scale: [1, 0.97, 1] } : { scale: 1 }}
       transition={{ duration: 0.26, ease: easeOutExpo }}
     >
-      <code><span aria-hidden="true">~ </span>{installCommand}</code>
+      <code><span aria-hidden="true">~ </span>{content.intro.installCommand}</code>
       <span className="quick-install-icon" aria-hidden="true">
         <AnimatePresence initial={false} mode="wait">
           <motion.span
@@ -291,8 +302,12 @@ function LineBreakHeadline({
   sceneIndex,
   semantic,
   staticScene = false,
+  content,
+  locale,
 }: {
+  content: LandingContent;
   example: LineBreakExample;
+  locale: SiteLocale;
   onLayoutComplete?: (sceneIndex: number) => void;
   run: number | null;
   sceneIndex?: number;
@@ -305,8 +320,8 @@ function LineBreakHeadline({
     <motion.p
       className="line-break-headline"
       layout={staticScene ? false : true}
-      aria-label={`${semantic ? "semantic-wrap 의미 줄바꿈" : "브라우저 기본 줄바꿈"}: ${example.text}`}
-      lang="ko"
+      aria-label={`${semantic ? content.intro.semanticLabel : content.intro.nativeLabel}: ${example.text}`}
+      lang={locale}
     >
       {example.pieces.map((piece, index) => {
         const followsBreak = index === breakAfter + 1;
@@ -365,7 +380,10 @@ function LineBreakHeadline({
 }
 
 type SceneViewProps = {
+  content: LandingContent;
   direction?: 1 | -1;
+  examples: readonly LineBreakExample[];
+  locale: SiteLocale;
   messagePhase?: MessagePhase | null;
   onLayoutComplete?: (sceneIndex: number) => void;
   run?: number | null;
@@ -374,9 +392,7 @@ type SceneViewProps = {
   staticScene?: boolean;
 };
 
-type SceneMotionProps = Pick<SceneViewProps, "direction" | "staticScene">;
-
-function HeroScene({ direction, staticScene }: SceneMotionProps) {
+function HeroScene({ content, direction, locale, staticScene }: SceneViewProps) {
   return (
     <SceneFrame
       className="hero-brand-stage intro-story-scene"
@@ -385,8 +401,8 @@ function HeroScene({ direction, staticScene }: SceneMotionProps) {
     >
       <div className="hero-brand-content">
         <BrandLockup className="hero-brand-lockup" />
-        <InstallCommand />
-        <StartAction />
+        <InstallCommand content={content} />
+        <StartAction content={content} locale={locale} />
       </div>
       <div className="hero-scroll-cue" aria-hidden="true">
         <motion.span
@@ -402,10 +418,11 @@ function HeroScene({ direction, staticScene }: SceneMotionProps) {
 
 function MessageScene({
   direction,
+  content,
   messagePhase: phase,
   run,
   staticScene,
-}: Pick<SceneViewProps, "direction" | "messagePhase" | "run" | "staticScene">) {
+}: Pick<SceneViewProps, "content" | "direction" | "messagePhase" | "run" | "staticScene">) {
   const resolvedPhase = staticScene ? "complete" : phase ?? "blank";
   const sourceVisible = resolvedPhase === "source" || resolvedPhase === "complete";
   const highlightVisible = resolvedPhase === "complete";
@@ -416,14 +433,14 @@ function MessageScene({
       direction={direction}
       staticScene={staticScene}
     >
-      <p className="intro-message-copy" aria-label="줄바꿈을 자연스럽게">
+      <p className="intro-message-copy" aria-label={content.intro.message.join(" ")}>
         <motion.span
           className="intro-message-source"
           initial={false}
           animate={sourceVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           transition={{ duration: 0.52, ease: easeOutExpo }}
         >
-          줄바꿈을
+          {content.intro.message[0]}
         </motion.span>
         <motion.span
           className="intro-message-highlight"
@@ -431,7 +448,7 @@ function MessageScene({
           animate={highlightVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
           transition={{ duration: 0.56, ease: easeOutExpo }}
         >
-          <ShimmerText run={run ?? null}>자연스럽게</ShimmerText>
+          <ShimmerText run={run ?? null}>{content.intro.message[1]}</ShimmerText>
         </motion.span>
       </p>
     </SceneFrame>
@@ -440,13 +457,16 @@ function MessageScene({
 
 function HeadlineScene({
   direction,
+  content,
+  examples,
+  locale,
   onLayoutComplete,
   run,
   scene,
   sceneIndex,
   staticScene,
 }: SceneViewProps & { scene: IntroScene & { kind: "headline" } }) {
-  const example = lineBreakExamples[scene.exampleIndex] ?? lineBreakExamples[0];
+  const example = examples[scene.exampleIndex] ?? examples[0];
   if (!example) return null;
 
   return (
@@ -466,7 +486,7 @@ function HeadlineScene({
         <div className="line-break-scene-state">
           <p
             className="line-break-state-track"
-            aria-label={`현재 보기: ${scene.semantic ? "semantic-wrap" : "브라우저 기본"}`}
+            aria-label={`${scene.semantic ? content.intro.semanticLabel : content.intro.nativeLabel}`}
           >
             <span className={scene.semantic ? undefined : "is-current"}>BEFORE</span>
             <span aria-hidden="true">→</span>
@@ -474,7 +494,7 @@ function HeadlineScene({
           </p>
           <span className="line-break-example-count">
             {String(scene.exampleIndex + 1).padStart(2, "0")} /{" "}
-            {String(lineBreakExamples.length).padStart(2, "0")}
+            {String(examples.length).padStart(2, "0")}
           </span>
         </div>
         <p className="line-break-scene-description">
@@ -483,6 +503,8 @@ function HeadlineScene({
       </motion.div>
       <LineBreakHeadline
         example={example}
+        content={content}
+        locale={locale}
         semantic={scene.semantic}
         run={run ?? null}
         staticScene={staticScene}
@@ -495,12 +517,13 @@ function HeadlineScene({
 
 function SceneView(props: SceneViewProps) {
   if (props.scene.kind === "hero") {
-    return <HeroScene direction={props.direction} staticScene={props.staticScene} />;
+    return <HeroScene {...props} />;
   }
   if (props.scene.kind === "message") {
     return (
       <MessageScene
         direction={props.direction}
+        content={props.content}
         messagePhase={props.messagePhase}
         run={props.run}
         staticScene={props.staticScene}
@@ -514,17 +537,34 @@ function sceneKey(scene: IntroScene) {
   return scene.kind === "headline" ? `headline-${scene.exampleIndex}` : scene.kind;
 }
 
-export function IntroStory() {
+export function IntroStory({ locale }: { locale: SiteLocale }) {
   const storyRef = useRef<HTMLElement>(null);
-  const { markLayoutComplete, playback, shouldReduceMotion } = useIntroTimeline(storyRef);
-  const currentScene = introScenes[playback.sceneIndex] ?? introScenes[0]!;
+  const content = landingContent[locale];
+  const scenes = useMemo(() => buildIntroScenes(content.examples), [content.examples]);
+  const timelineUnits = useMemo(
+    () => scenes.reduce((total, scene) => total + scene.weight, 0),
+    [scenes],
+  );
+  const { markLayoutComplete, playback, shouldReduceMotion } = useIntroTimeline(
+    storyRef,
+    scenes,
+    timelineUnits,
+  );
+  const currentScene = scenes[playback.sceneIndex] ?? scenes[0]!;
 
   if (shouldReduceMotion) {
     return (
       <section className="intro-story is-static" id="top" ref={storyRef}>
         <span className="hero-brand-visibility-sentinel" aria-hidden="true" />
-        {introScenes.map((scene) => (
-          <SceneView key={scene.id} scene={scene} staticScene />
+        {scenes.map((scene) => (
+          <SceneView
+            content={content}
+            examples={content.examples}
+            key={scene.id}
+            locale={locale}
+            scene={scene}
+            staticScene
+          />
         ))}
       </section>
     );
@@ -534,7 +574,7 @@ export function IntroStory() {
     <section
       className="intro-story"
       id="top"
-      aria-label="브라우저 기본 줄바꿈과 semantic-wrap 비교"
+      aria-label={content.intro.comparisonLabel}
       ref={storyRef}
       data-intro-message-phase={playback.messagePhase ?? undefined}
       data-shimmer-active={playback.shimmerRun === null ? undefined : "true"}
@@ -552,12 +592,15 @@ export function IntroStory() {
             <AnimatePresence initial={false} custom={playback.direction} mode="sync">
               <SceneView
                 direction={playback.direction}
+                content={content}
+                examples={content.examples}
                 key={sceneKey(currentScene)}
                 messagePhase={playback.messagePhase}
                 onLayoutComplete={markLayoutComplete}
                 run={playback.shimmerRun}
                 scene={currentScene}
                 sceneIndex={playback.sceneIndex}
+                locale={locale}
               />
             </AnimatePresence>
           </LayoutGroup>

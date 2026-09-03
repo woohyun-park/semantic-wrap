@@ -17,6 +17,7 @@
     "jsx": "react-jsx",
     "paths": {
       "@semantic-wrap/core": ["../../packages/core/src/index.ts"],
+      "@semantic-wrap/en": ["../../packages/en/src/index.ts"],
       "@semantic-wrap/ko": ["../../packages/ko/src/index.ts"],
       "@semantic-wrap/react": ["../../packages/react/src/index.tsx"]
     },

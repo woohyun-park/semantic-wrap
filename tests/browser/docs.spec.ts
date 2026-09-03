@@ -1,7 +1,41 @@
 import { expect, test } from "@playwright/test";
 
 const docsUrl = "http://127.0.0.1:4192/ko/docs/introduction";
-const landingUrl = "http://127.0.0.1:4192/";
+const landingUrl = "http://127.0.0.1:4192/ko";
+const englishDocsUrl = "http://127.0.0.1:4192/docs/introduction";
+const englishLandingUrl = "http://127.0.0.1:4192/";
+
+test("serves English first and preserves the current documentation hash when switching languages", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(englishLandingUrl);
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator(".intro-message-copy")).toContainText("Line breaks,naturally");
+  await expect(page.locator('.main-nav a[href="/docs/introduction"]')).toHaveText("Docs");
+  await expect(page.locator('.main-nav a[href="/ko"]')).toHaveText("한국어");
+
+  await page.locator('.process-list [data-process-step="2"] button').click();
+  const comparison = page.locator(".process-selection-comparison");
+  await expect(comparison).toHaveAttribute("data-result", "applied");
+  await expect(comparison.locator(".is-native p")).not.toHaveText(
+    await comparison.locator(".is-semantic p").innerText(),
+  );
+
+  await page.goto(`${englishDocsUrl}#strategies`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("#strategies")).toContainText("The default strategy");
+  await expect(page.locator('.main-nav a[href="/ko/docs/introduction#strategies"]')).toHaveText("한국어");
+});
+
+test("keeps the Korean landing and docs available under the ko prefix", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(landingUrl);
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+  await expect(page.locator(".intro-message-copy")).toContainText("줄바꿈을자연스럽게");
+  await expect(page.locator('.main-nav a[href="/ko/docs/introduction"]')).toHaveText("문서");
+  await expect(page.locator('.main-nav a[href="/"]')).toHaveText("EN");
+});
 
 test("moves the document without letting sidebar centering override the anchor", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });

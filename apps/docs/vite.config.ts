@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@semantic-wrap/core": source("packages/core/src/index.ts"),
+      "@semantic-wrap/en": source("packages/en/src/index.ts"),
       "@semantic-wrap/ko": source("packages/ko/src/index.ts"),
       "@semantic-wrap/react": source("packages/react/src/index.tsx"),
     },

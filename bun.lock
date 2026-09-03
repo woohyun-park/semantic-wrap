@@ -21,6 +21,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@semantic-wrap/core": "workspace:*",
+        "@semantic-wrap/en": "workspace:*",
         "@semantic-wrap/ko": "workspace:*",
         "@semantic-wrap/react": "workspace:*",
         "motion": "^13.2.0",

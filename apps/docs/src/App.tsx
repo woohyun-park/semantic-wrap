@@ -1,4 +1,3 @@
-import { koTitleModel } from "@semantic-wrap/ko";
 import { SemanticWrap, useSemanticWrap } from "@semantic-wrap/react";
 import type {
   BreakCandidate,
@@ -25,10 +24,18 @@ import {
 } from "motion/react";
 import { DocsApp } from "./Docs";
 import { IntroStory } from "./IntroStory";
-import { KoreanSemanticWrap } from "./KoreanSemanticWrap";
-import { demoHeadlines, lineBreakExamples } from "./landing-content";
+import { landingContent, type LandingContent } from "./landing-content";
+import { LocalizedSemanticWrap } from "./LocalizedSemanticWrap";
 import { easeOutExpo, revealMotion } from "./motion-values";
 import { SiteFooter, SiteHeader } from "./site";
+import { titleModels } from "./site-models";
+import {
+  docsPath,
+  landingPath,
+  localeFromPath,
+  productionUrl,
+  type SiteLocale,
+} from "./site-config";
 
 function useMeasureWidth(paneBodyRef: RefObject<HTMLDivElement | null>) {
   const previousMaxWidth = useRef(640);
@@ -133,7 +140,10 @@ function renderSemanticDiff(
   return <Fragment>{content}</Fragment>;
 }
 
-function Playground() {
+function Playground({ locale }: { locale: SiteLocale }) {
+  const content = landingContent[locale];
+  const { demoHeadlines, playground } = content;
+  const model = titleModels[locale];
   const paneBodyRef = useRef<HTMLDivElement>(null);
   const dragPointerRef = useRef<number | null>(null);
   const [headlineIndex, setHeadlineIndex] = useState(0);
@@ -142,7 +152,7 @@ function Playground() {
   const text = demoHeadlines[headlineIndex] ?? demoHeadlines[0] ?? "";
   const { ref, selection, diagnostics } = useSemanticWrap({
     text,
-    model: koTitleModel,
+    model,
     diagnostics: true,
   });
   const currentSelection = selection?.text === text ? selection : null;
@@ -197,7 +207,7 @@ function Playground() {
         </motion.div>
 
         <div className={`measure-instrument${measureDragging ? " is-dragging" : ""}`}>
-          <div className="headline-presets" role="group" aria-label="예시 제목 선택">
+          <div className="headline-presets" role="group" aria-label={playground.presetLabel}>
             {demoHeadlines.map((headline, index) => (
               <button
                 type="button"
@@ -206,8 +216,8 @@ function Playground() {
                 aria-pressed={index === headlineIndex}
                 onClick={() => setHeadlineIndex(index)}
               >
-                <span>예시 0{index + 1}</span>
-                <SemanticWrap model={koTitleModel}>
+                <span>{playground.example} 0{index + 1}</span>
+                <SemanticWrap model={model}>
                   <strong>{headline}</strong>
                 </SemanticWrap>
               </button>
@@ -217,16 +227,16 @@ function Playground() {
           <div className="measure-comparison">
             <article className="measure-pane is-browser" aria-labelledby="browser-measure-label">
               <div className="measure-pane-head">
-                <span id="browser-measure-label"><b>01</b> 브라우저 기본</span>
-                <span>{nativeLineCount}줄</span>
+                <span id="browser-measure-label"><b>01</b> {playground.browser}</span>
+                <span>{playground.lines(nativeLineCount)}</span>
               </div>
               <div className="measure-pane-body" ref={paneBodyRef}>
                 <div className="headline-measure" style={{ width: `${width}px` }}>
                   <span className="measure-edge measure-edge-left" aria-hidden="true" />
-                  <h3 ref={ref} className="demo-headline demo-headline-measure-source" lang="ko" aria-hidden="true">
+                  <h3 ref={ref} className="demo-headline demo-headline-measure-source" lang={locale} aria-hidden="true">
                     {text}
                   </h3>
-                  <h3 className="demo-headline" lang="ko">
+                  <h3 className="demo-headline" lang={locale}>
                     {renderWithBreaks(text, nativeBreaks)}
                   </h3>
                   <span className="measure-edge measure-edge-right" aria-hidden="true" />
@@ -244,13 +254,13 @@ function Playground() {
 
             <article className="measure-pane is-semantic" aria-labelledby="semantic-measure-label">
               <div className="measure-pane-head">
-                <span id="semantic-measure-label"><b>02</b> semantic-wrap</span>
-                <span>{semanticLineCount}줄</span>
+                <span id="semantic-measure-label"><b>02</b> {playground.semantic}</span>
+                <span>{playground.lines(semanticLineCount)}</span>
               </div>
               <div className="measure-pane-body">
                 <div className="headline-measure" style={{ width: `${width}px` }}>
                   <span className="measure-edge measure-edge-left" aria-hidden="true" />
-                  <h3 className="demo-headline" lang="ko">
+                  <h3 className="demo-headline" lang={locale}>
                     {renderSemanticDiff(text, semanticBreaks, nativeBreaks)}
                   </h3>
                   <span className="measure-edge measure-edge-right" aria-hidden="true" />
@@ -272,12 +282,12 @@ function Playground() {
               <input
                 id="measure-width"
                 type="range"
-                aria-label="제목 컨테이너 너비"
+                aria-label={playground.widthLabel}
                 min="240"
                 max={maxWidth}
                 step="2"
                 value={width}
-                aria-valuetext={`${width}픽셀`}
+                aria-valuetext={playground.widthValue(width)}
                 onChange={(event) => setWidth(Number(event.currentTarget.value))}
               />
               <div className="range-scale" aria-hidden="true">
@@ -293,39 +303,16 @@ function Playground() {
   );
 }
 
-function Hero() {
+function Hero({ locale }: { locale: SiteLocale }) {
   return (
     <main id="main-content">
-      <IntroStory />
+      <IntroStory locale={locale} />
 
-      <ProcessSection />
-      <Playground />
+      <ProcessSection locale={locale} />
+      <Playground locale={locale} />
     </main>
   );
 }
-
-const processSteps = [
-  {
-    number: "01",
-    title: "경계를 찾고",
-    description: "언어 모델이 문장 안에서 자연스럽게 끊을 수 있는 후보를 예측합니다.",
-  },
-  {
-    number: "02",
-    title: "실제로 재고",
-    description: "현재 글꼴과 컨테이너 너비로 가능한 레이아웃을 브라우저에서 측정합니다.",
-  },
-  {
-    number: "03",
-    title: "더 나은 쪽을 고릅니다",
-    description: "의미 비용이 낮고 줄 균형도 허용 범위 안인 결과만 실제 화면에 적용합니다.",
-  },
-];
-
-const processExampleText = demoHeadlines[2] ?? "";
-const processSemanticReason = lineBreakExamples[2]?.semanticDescription
-  ?? "의미가 이어지는 표현을 같은 줄에 유지했습니다.";
-const processMeasureWidth = 220;
 
 type ProcessLayoutEntry = {
   id: string;
@@ -356,8 +343,14 @@ function getProcessLayoutEntries(
 
 function ProcessCandidates({
   candidates,
+  content,
+  locale,
+  text,
 }: {
   candidates: readonly BreakCandidate[];
+  content: LandingContent;
+  locale: SiteLocale;
+  text: string;
 }) {
   const segments: { candidate?: BreakCandidate; text: string }[] = [];
   let start = 0;
@@ -365,17 +358,17 @@ function ProcessCandidates({
   for (const candidate of candidates) {
     segments.push({
       candidate,
-      text: processExampleText.slice(start, candidate.offset).trim(),
+      text: text.slice(start, candidate.offset).trim(),
     });
     start = candidate.offset;
   }
-  segments.push({ text: processExampleText.slice(start).trim() });
+  segments.push({ text: text.slice(start).trim() });
 
   return (
     <p
       className="process-candidates"
-      lang="ko"
-      aria-label={`실제 모델이 찾은 줄바꿈 후보: ${processExampleText}`}
+      lang={locale}
+      aria-label={`${content.process.candidateLabel}: ${text}`}
     >
       {segments.map((segment, index) => (
         <Fragment key={`${segment.candidate?.offset ?? "end"}-${segment.text}`}>
@@ -385,8 +378,8 @@ function ProcessCandidates({
               className={segment.candidate.level === null ? "is-fallback" : "is-predicted"}
               title={
                 segment.candidate.level === null
-                  ? "공백 기반 보조 후보"
-                  : `${segment.candidate.name ?? "모델"} 예측 후보`
+                  ? content.process.fallbackCandidate
+                  : content.process.predictedCandidate(segment.candidate.name ?? "model")
               }
               aria-hidden="true"
             >
@@ -400,21 +393,25 @@ function ProcessCandidates({
 }
 
 function ProcessLayoutOptions({
+  content,
   diagnostics,
+  locale,
 }: {
+  content: LandingContent;
   diagnostics: LineBreakDiagnostics | null;
+  locale: SiteLocale;
 }) {
   const layouts = getProcessLayoutEntries(diagnostics);
   const shouldReduceMotion = Boolean(usePrefersReducedMotion());
 
   if (layouts.length === 0) {
-    return <p className="process-diagnostics-loading">현재 글꼴과 너비를 측정하고 있습니다…</p>;
+    return <p className="process-diagnostics-loading">{content.process.measureLoading}</p>;
   }
 
   return (
     <div
       className="process-layout-options"
-      aria-label="실제로 측정한 레이아웃 후보"
+      aria-label={content.process.layoutLabel}
     >
       {layouts.map((entry, index) => {
         return (
@@ -432,7 +429,7 @@ function ProcessLayoutOptions({
             }}
           >
             <span className="process-layout-id">{entry.id}</span>
-            <p lang="ko">
+            <p lang={locale}>
               {entry.layout.lines.map((line, lineIndex) => (
                 <Fragment key={`${entry.id}-${lineIndex}-${line}`}>
                   {line}
@@ -441,8 +438,8 @@ function ProcessLayoutOptions({
               ))}
             </p>
             <span className="process-layout-state">
-              <span>균형 비용 {entry.layout.balanceScore.toFixed(2)}</span>
-              <span>의미 비용 {entry.layout.modelCost.toFixed(2)}</span>
+              <span>{content.process.balanceCost} {entry.layout.balanceScore.toFixed(2)}</span>
+              <span>{content.process.semanticCost} {entry.layout.modelCost.toFixed(2)}</span>
             </span>
           </motion.article>
         );
@@ -452,42 +449,52 @@ function ProcessLayoutOptions({
 }
 
 function ProcessSelectionComparison({
+  content,
   diagnostics,
+  locale,
   selection,
+  text,
 }: {
+  content: LandingContent;
   diagnostics: LineBreakDiagnostics | null;
+  locale: SiteLocale;
   selection: LineBreakSelection | null;
+  text: string;
 }) {
   const nativeLayout = diagnostics?.nativeLayout;
   if (!nativeLayout || !selection) {
-    return <p className="process-diagnostics-loading">실제 선택 결과를 계산하고 있습니다…</p>;
+    return <p className="process-diagnostics-loading">{content.process.selectionLoading}</p>;
   }
 
   return (
     <div
       className="process-selection-comparison"
       data-result={selection.applied ? "applied" : "native"}
-      aria-label="실제로 측정한 현재 CSS 결과와 semantic-wrap 선택 결과"
+      aria-label={content.process.selectionLabel}
     >
       <article className="process-selection-card is-native">
-        <span aria-label="BEFORE · 현재 CSS">BEFORE</span>
-        <p lang="ko">{renderWithBreaks(processExampleText, nativeLayout.breaks)}</p>
+        <span aria-label={content.process.beforeLabel}>BEFORE</span>
+        <p lang={locale}>{renderWithBreaks(text, nativeLayout.breaks)}</p>
       </article>
       <span className="process-selection-arrow" aria-hidden="true">↓</span>
       <article className="process-selection-card is-semantic">
-        <span aria-label="AFTER · semantic-wrap 적용 결과">AFTER</span>
-        <p lang="ko">
-          {renderSemanticDiff(processExampleText, selection.breaks, nativeLayout.breaks)}
+        <span aria-label={content.process.afterLabel}>AFTER</span>
+        <p lang={locale}>
+          {renderSemanticDiff(text, selection.breaks, nativeLayout.breaks)}
         </p>
       </article>
     </div>
   );
 }
 
-function ProcessStage({ activeStep }: { activeStep: number }) {
+function ProcessStage({ activeStep, locale }: { activeStep: number; locale: SiteLocale }) {
+  const content = landingContent[locale];
+  const processExampleText = content.demoHeadlines[2];
+  const processSemanticReason = content.examples[2]?.semanticDescription ?? content.process.nativeKept;
+  const processMeasureWidth = locale === "ko" ? 220 : 300;
   const { ref, selection, diagnostics } = useSemanticWrap({
     text: processExampleText,
-    model: koTitleModel,
+    model: titleModels[locale],
     diagnostics: true,
   });
   const currentSelection = selection?.text === processExampleText ? selection : null;
@@ -498,23 +505,23 @@ function ProcessStage({ activeStep }: { activeStep: number }) {
   );
   const processStageStatus = currentDiagnostics
     ? [
-        `실제 진단 · 후보 ${currentDiagnostics.candidates.length}개 · 모델 예측 ${predictedOffsets.size}개`,
-        `${processMeasureWidth}px 실측 · 현재 CSS안 포함 ${layoutEntries.length}개 레이아웃`,
+        content.process.diagnostic(currentDiagnostics.candidates.length, predictedOffsets.size),
+        content.process.measurement(processMeasureWidth, layoutEntries.length),
         currentSelection?.applied
           ? processSemanticReason
-          : "브라우저 기본 줄바꿈이 이미 가장 적합해 변경하지 않았습니다.",
+          : content.process.nativeKept,
       ]
     : [
-        "실제 모델 응답을 불러오고 있습니다",
-        "현재 글꼴과 컨테이너 너비를 측정하고 있습니다",
-        "실제 선택 결과를 계산하고 있습니다",
+        content.process.candidateLoading,
+        content.process.measureLoading,
+        content.process.selectionLoading,
       ];
 
   return (
     <motion.aside
       className="process-stage"
       id="process-stage"
-      aria-label="작동 방식 실시간 미리보기"
+      aria-label={content.process.ariaLabel}
       {...revealMotion}
     >
       <div className="process-stage-head">
@@ -524,7 +531,7 @@ function ProcessStage({ activeStep }: { activeStep: number }) {
         className="process-measure-source"
         ref={ref}
         aria-hidden="true"
-        lang="ko"
+        lang={locale}
         style={{ "--process-measure-width": `${processMeasureWidth}px` } as CSSProperties}
       >
         {processExampleText}
@@ -540,16 +547,19 @@ function ProcessStage({ activeStep }: { activeStep: number }) {
         >
           {activeStep === 0 ? (
             currentDiagnostics
-              ? <ProcessCandidates candidates={currentDiagnostics.candidates} />
-              : <p className="process-diagnostics-loading">실제 후보를 계산하고 있습니다…</p>
+              ? <ProcessCandidates candidates={currentDiagnostics.candidates} content={content} locale={locale} text={processExampleText} />
+              : <p className="process-diagnostics-loading">{content.process.candidateLoading}</p>
           ) : null}
           {activeStep === 1 ? (
-            <ProcessLayoutOptions diagnostics={currentDiagnostics} />
+            <ProcessLayoutOptions content={content} diagnostics={currentDiagnostics} locale={locale} />
           ) : null}
           {activeStep === 2 ? (
             <ProcessSelectionComparison
+              content={content}
               diagnostics={currentDiagnostics}
+              locale={locale}
               selection={currentSelection}
+              text={processExampleText}
             />
           ) : null}
         </motion.div>
@@ -562,7 +572,9 @@ function ProcessStage({ activeStep }: { activeStep: number }) {
   );
 }
 
-function ProcessSection() {
+function ProcessSection({ locale }: { locale: SiteLocale }) {
+  const content = landingContent[locale];
+  const processSteps = content.process.steps;
   const listRef = useRef<HTMLOListElement>(null);
   const [activeStep, setActiveStep] = useState(0);
   const { scrollYProgress } = useScroll({
@@ -582,16 +594,16 @@ function ProcessSection() {
     <section className="process-section" id="process" aria-labelledby="process-title">
       <div className="page-width">
         <motion.div className="section-intro" {...revealMotion}>
-          <KoreanSemanticWrap>
-            <h2 id="process-title">모델이 제안하고, 브라우저가 검증합니다.</h2>
-          </KoreanSemanticWrap>
-          <KoreanSemanticWrap>
-            <p>모델이 찾은 의미 경계와 실제 렌더링 너비를 함께 비교해, 바꿀 가치가 있는 줄바꿈만 적용합니다.</p>
-          </KoreanSemanticWrap>
+          <LocalizedSemanticWrap locale={locale}>
+            <h2 id="process-title">{content.process.title}</h2>
+          </LocalizedSemanticWrap>
+          <LocalizedSemanticWrap locale={locale}>
+            <p>{content.process.lead}</p>
+          </LocalizedSemanticWrap>
         </motion.div>
 
         <div className="process-workbench">
-          <ProcessStage activeStep={activeStep} />
+          <ProcessStage activeStep={activeStep} locale={locale} />
           <ol className="process-list" ref={listRef}>
             {processSteps.map((step, index) => (
               <li
@@ -610,9 +622,9 @@ function ProcessSection() {
                 >
                   <span className="process-number">{step.number}</span>
                   <span className="process-step-copy">
-                    <KoreanSemanticWrap>
+                    <LocalizedSemanticWrap locale={locale}>
                       <strong>{step.title}</strong>
-                    </KoreanSemanticWrap>
+                    </LocalizedSemanticWrap>
                     <span>{step.description}</span>
                   </span>
                 </button>
@@ -626,15 +638,51 @@ function ProcessSection() {
 }
 
 export function App() {
-  if (window.location.pathname.startsWith("/ko/docs")) {
-    return <DocsApp />;
-  }
+  const locale = localeFromPath(window.location.pathname);
+  const isDocs = window.location.pathname === "/docs"
+    || window.location.pathname.startsWith("/docs/")
+    || window.location.pathname === "/ko/docs"
+    || window.location.pathname.startsWith("/ko/docs/");
+
+  useEffect(() => {
+    const canonicalPath = isDocs ? docsPath(locale) : landingPath(locale);
+    const alternateLocale = locale === "en" ? "ko" : "en";
+    const alternatePath = isDocs ? docsPath(alternateLocale) : landingPath(alternateLocale);
+    const description = locale === "ko"
+      ? "학습된 모델과 실제 렌더링 결과를 바탕으로 더 자연스러운 줄바꿈을 선택하는 JavaScript 라이브러리"
+      : "A JavaScript library that selects natural line breaks from a trained model and the actual rendered layout.";
+
+    document.documentElement.lang = locale;
+    document.title = isDocs
+      ? locale === "ko" ? "semantic-wrap 소개 | 문서" : "Introduction | semantic-wrap docs"
+      : locale === "ko" ? "semantic-wrap — 의미를 지키는 줄바꿈" : "semantic-wrap — line breaks that preserve meaning";
+    document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", description);
+
+    document.querySelectorAll("link[data-semantic-wrap-locale]").forEach((link) => link.remove());
+    for (const attributes of [
+      { rel: "canonical", href: `${productionUrl}${canonicalPath}` },
+      { rel: "alternate", href: `${productionUrl}${locale === "en" ? canonicalPath : alternatePath}`, hrefLang: "en" },
+      { rel: "alternate", href: `${productionUrl}${locale === "ko" ? canonicalPath : alternatePath}`, hrefLang: "ko" },
+      { rel: "alternate", href: `${productionUrl}${locale === "en" ? canonicalPath : alternatePath}`, hrefLang: "x-default" },
+    ]) {
+      const link = document.createElement("link");
+      link.dataset.semanticWrapLocale = "true";
+      link.rel = attributes.rel;
+      link.href = attributes.href;
+      if (attributes.hrefLang) link.hreflang = attributes.hrefLang;
+      document.head.append(link);
+    }
+  }, [isDocs, locale]);
+
+  if (isDocs) return <DocsApp locale={locale} />;
+
+  const skipLabel = locale === "ko" ? "본문으로 바로가기" : "Skip to content";
 
   return (
-    <div className="site-shell">
-      <a className="skip-link" href="#main-content">본문으로 바로가기</a>
-      <SiteHeader hideBrandWhile=".hero-brand-visibility-sentinel" />
-      <Hero />
+    <div className="site-shell" data-locale={locale}>
+      <a className="skip-link" href="#main-content">{skipLabel}</a>
+      <SiteHeader hideBrandWhile=".hero-brand-visibility-sentinel" locale={locale} />
+      <Hero locale={locale} />
       <SiteFooter />
     </div>
   );
