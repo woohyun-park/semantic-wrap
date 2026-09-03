@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
+import "@fontsource-variable/noto-sans-kr";
 import { App } from "./App";
 import "./styles.css";
 import "./docs.css";

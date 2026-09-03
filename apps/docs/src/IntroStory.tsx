@@ -384,6 +384,8 @@ function LineBreakHeadline({
         data-baseline="css-balance"
         data-breaks={displayedBreaks.join(",")}
         data-selection-applied={currentSelection?.applied ? "true" : "false"}
+        data-semantic-phrase={example.semanticPhrase}
+        data-source-text={example.text}
         lang={locale}
         style={measureStyle}
       >
@@ -398,16 +400,20 @@ function LineBreakHeadline({
           const pieceClassName = [
             "line-break-piece",
             changed ? "is-focus" : "",
-            index > 0 && !followsBreak ? "has-gap" : "",
           ].filter(Boolean).join(" ");
 
           return (
             <Fragment key={`${example.id}-${token.start}`}>
+              {index > 0 && !followsBreak ? (
+                <span className="line-break-gap" aria-hidden="true">{" "}</span>
+              ) : null}
               <motion.span
                 className={pieceClassName}
                 data-flip-piece={`${example.id}-${index}`}
                 data-motion-layout={staticScene ? undefined : "position"}
                 data-piece-index={index}
+                data-piece-start={token.start}
+                data-piece-end={token.end}
                 layout={staticScene ? false : "position"}
                 layoutDependency={`${semantic}:${displayedBreaks.join(",")}`}
                 initial={staticScene ? false : { opacity: 0, y: 19 }}
@@ -547,6 +553,7 @@ function HeadlineScene({
       direction={direction}
       staticScene={staticScene}
       data-semantic={scene.semantic ? "true" : "false"}
+      data-semantic-phrase={example.semanticPhrase}
     >
       <motion.div
         className="line-break-scene-context"

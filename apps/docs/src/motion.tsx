@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   motion,
   useAnimationControls,
@@ -59,6 +59,7 @@ export function ShimmerText({
   const target = useAnimationControls();
   const overlay = useAnimationControls();
   const active = run !== null;
+  const [motionState, setMotionState] = useState<"complete" | "idle" | "running">("idle");
 
   useEffect(() => {
     let cancelled = false;
@@ -66,10 +67,13 @@ export function ShimmerText({
     overlay.stop();
 
     if (!active) {
+      setMotionState("idle");
       target.set({ scale: 1 });
       overlay.set({ backgroundPosition: "130% 50%", opacity: 0 });
       return undefined;
     }
+
+    setMotionState("running");
 
     void target.start({
       scale: 0.955,
@@ -93,6 +97,8 @@ export function ShimmerText({
         ease: "linear",
         times: [...shimmer.times],
       },
+    }).then(() => {
+      if (!cancelled) setMotionState("complete");
     });
 
     return () => {
@@ -107,6 +113,8 @@ export function ShimmerText({
       animate={target}
       className="gradient-text-safe text-shimmer-target"
       data-motion-shimmer={active ? "active" : "idle"}
+      data-motion-shimmer-run={run ?? undefined}
+      data-motion-shimmer-state={motionState}
       initial={false}
     >
       {children}

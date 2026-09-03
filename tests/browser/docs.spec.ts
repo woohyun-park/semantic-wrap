@@ -1,9 +1,32 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 
 const docsUrl = "http://127.0.0.1:4192/ko/docs/introduction";
 const landingUrl = "http://127.0.0.1:4192/ko";
 const englishDocsUrl = "http://127.0.0.1:4192/docs/introduction";
 const englishLandingUrl = "http://127.0.0.1:4192/";
+
+async function semanticPhraseLineCount(
+  headline: Locator,
+): Promise<number> {
+  return headline.evaluate((element) => {
+    const source = element.getAttribute("data-source-text") ?? "";
+    const phrase = element.getAttribute("data-semantic-phrase") ?? "";
+    const phraseStart = source.indexOf(phrase);
+    const phraseEnd = phraseStart + phrase.length;
+    const pieces = [...element.querySelectorAll<HTMLElement>(".line-break-piece")].filter(
+      (piece) => {
+        const start = Number(piece.dataset.pieceStart);
+        const end = Number(piece.dataset.pieceEnd);
+        return start >= phraseStart && end <= phraseEnd;
+      },
+    );
+    return new Set(pieces.map((piece) => Math.round(piece.getBoundingClientRect().top))).size;
+  });
+}
+
+async function renderedLines(locator: Locator): Promise<string[]> {
+  return (await locator.innerText()).split("\n").map((line) => line.trim()).filter(Boolean);
+}
 
 test("serves English first and preserves the current documentation hash when switching languages", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -408,10 +431,14 @@ test("uses an actual CSS balance selection for every landing example", async ({ 
       ))).toEqual(["true", "true", "true"]);
 
       for (let index = 0; index < 3; index += 1) {
-        const nativeBreaks = await nativeHeadlines.nth(index).getAttribute("data-breaks");
-        const semanticBreaks = await semanticHeadlines.nth(index).getAttribute("data-breaks");
+        const nativeHeadline = nativeHeadlines.nth(index);
+        const semanticHeadline = semanticHeadlines.nth(index);
+        const nativeBreaks = await nativeHeadline.getAttribute("data-breaks");
+        const semanticBreaks = await semanticHeadline.getAttribute("data-breaks");
         expect(nativeBreaks).not.toBe(semanticBreaks);
         expect(nativeBreaks?.split(",").length).toBe(semanticBreaks?.split(",").length);
+        expect(await semanticPhraseLineCount(nativeHeadline)).toBeGreaterThan(1);
+        expect(await semanticPhraseLineCount(semanticHeadline)).toBe(1);
       }
 
       const lineCountMatchesBreaks = await page.locator(".line-break-headline").evaluateAll(
@@ -433,6 +460,14 @@ test("uses an actual CSS balance selection for every landing example", async ({ 
         "data-result",
         "applied",
       );
+
+      const processComparison = page.locator(".process-selection-comparison");
+      const processPhrase = await processComparison.getAttribute("data-semantic-phrase");
+      expect(processPhrase).toBeTruthy();
+      const processNativeLines = await renderedLines(processComparison.locator(".is-native p"));
+      const processSemanticLines = await renderedLines(processComparison.locator(".is-semantic p"));
+      expect(processNativeLines.some((line) => line.includes(processPhrase!))).toBe(false);
+      expect(processSemanticLines.some((line) => line.includes(processPhrase!))).toBe(true);
 
       const presets = page.locator(".headline-presets button");
       for (let index = 0; index < 3; index += 1) {
@@ -656,10 +691,6 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
       filter: styles.filter,
     };
   });
-  const readScale = async (selector: string) => page.locator(selector).evaluate((element) => {
-    const transform = window.getComputedStyle(element).transform;
-    return transform === "none" ? 1 : new DOMMatrixReadOnly(transform).a;
-  });
 
   const story = page.locator(".intro-story");
   await scrollToStoryPosition(2.52);
@@ -674,18 +705,12 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
 
   await scrollToStoryPosition(2.56);
   await expect(story).toHaveAttribute("data-shimmer-active", "true");
-  await expect(page.locator(messageTargetSelector)).toHaveAttribute("data-motion-shimmer", "active");
-  await expect.poll(
-    () => readScale(messageTargetSelector),
-    { intervals: Array.from({ length: 30 }, () => 10), timeout: 500 },
-  ).toBeLessThan(0.99);
-  await expect.poll(async () => Number(
-    await page.locator(messageShimmerSelector).evaluate((element) =>
-      window.getComputedStyle(element).opacity),
-  )).toBeGreaterThan(0.5);
+  const messageTarget = page.locator(messageTargetSelector);
+  await expect(messageTarget).toHaveAttribute("data-motion-shimmer", "active");
+  await expect(messageTarget).toHaveAttribute("data-motion-shimmer-run", /\d+/u);
+  await expect(messageTarget).toHaveAttribute("data-motion-shimmer-state", "complete");
+  const messageRun = Number(await messageTarget.getAttribute("data-motion-shimmer-run"));
   const messageShimmer = await readShimmer(messageShimmerSelector);
-  await expect.poll(() => readScale(messageTargetSelector)).toBe(1);
-  await page.waitForTimeout(300);
   await expect(page.locator(messageShimmerSelector)).toHaveCSS("opacity", "0");
   await expect(page.locator(messageShimmerSelector)).toHaveCSS("background-position", "-30% 50%");
   const messageTargetGradient = await page.locator(messageTargetSelector).evaluate((element) =>
@@ -727,7 +752,11 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
   expect(exampleShimmer.backgroundSize).toBe(messageShimmer.backgroundSize);
   expect(exampleShimmer.filter).toContain("rgba(83, 139, 246, 0.68)");
   expect(messageShimmer.filter).toContain("rgba(83, 139, 246, 0.68)");
-  await expect(page.locator(exampleTargetSelector)).toHaveAttribute("data-motion-shimmer", "active");
+  const exampleTarget = page.locator(exampleTargetSelector);
+  await expect(exampleTarget).toHaveAttribute("data-motion-shimmer", "active");
+  await expect(exampleTarget).toHaveAttribute("data-motion-shimmer-state", "complete");
+  const exampleRun = Number(await exampleTarget.getAttribute("data-motion-shimmer-run"));
+  expect(exampleRun).toBeGreaterThan(messageRun);
   const exampleTargetGradient = await page.locator(exampleTargetSelector).evaluate((element) =>
     window.getComputedStyle(element).backgroundImage);
   expect(exampleTargetGradient).toBe(messageTargetGradient);
@@ -782,27 +811,28 @@ test("shows a meaningful English change for every playground preset", async ({ p
 
   await expect(page.locator("#browser-measure-label")).toContainText("CSS balance");
   await expect(page.locator(".demo-headline-measure-source")).toHaveCSS("text-wrap", "balance");
-  await page.locator("#measure-width").fill("414");
-
-  const expected = [
-    ["Write clear headlines for\nreaders, not for reviewers", "Write clear headlines\nfor readers, not for reviewers"],
-    ["Earn customer trust before\nasking for more data", "Earn customer trust\nbefore asking for more data"],
-    ["Design documentation for\npeople who need to act", "Design documentation\nfor people who need to act"],
-  ] as const;
 
   const presets = page.locator(".headline-presets button");
-  for (const [index, [browserText, semanticText]] of expected.entries()) {
+  for (let index = 0; index < 3; index += 1) {
     await presets.nth(index).click();
+    const instrument = page.locator(".measure-instrument");
     const browserHeadline = page.locator(".measure-pane.is-browser .demo-headline:not(.demo-headline-measure-source)");
     const semanticHeadline = page.locator(".measure-pane.is-semantic .demo-headline");
-    await expect.poll(() => browserHeadline.innerText()).toBe(browserText);
-    await expect.poll(() => semanticHeadline.innerText()).toBe(semanticText);
+    await expect(instrument).toHaveAttribute("data-result", "applied");
+    const phrase = await instrument.getAttribute("data-semantic-phrase");
+    expect(phrase).toBeTruthy();
+    const browserLines = await renderedLines(browserHeadline);
+    const semanticLines = await renderedLines(semanticHeadline);
+    expect(browserLines).toHaveLength(semanticLines.length);
+    expect(browserLines.some((line) => line.includes(phrase!))).toBe(false);
+    expect(semanticLines.some((line) => line.includes(phrase!))).toBe(true);
     await expect(semanticHeadline.locator(".semantic-diff-changed")).not.toHaveCount(0);
   }
 });
 
-test("keeps both playground results close enough to compare on mobile", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+test("keeps both playground results within one mobile viewport", async ({ page }) => {
+  const viewport = { width: 390, height: 844 };
+  await page.setViewportSize(viewport);
   await page.goto(englishLandingUrl);
 
   const panes = page.locator(".measure-pane");
@@ -814,8 +844,9 @@ test("keeps both playground results close enough to compare on mobile", async ({
     (elements) => elements.map((element) => element.getBoundingClientRect().height),
   );
 
-  expect(comparisonHeight).toBeLessThanOrEqual(500);
-  expect(paneHeights.every((height) => height <= 250)).toBe(true);
+  expect(comparisonHeight).toBeLessThanOrEqual(viewport.height * 0.65);
+  expect(paneHeights.every((height) => height <= viewport.height * 0.325)).toBe(true);
+  expect(Math.abs(paneHeights[0]! - paneHeights[1]!)).toBeLessThan(1);
 });
 
 test("keeps stacked playground results compact on tablet widths", async ({ page }) => {

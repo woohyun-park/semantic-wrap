@@ -34,7 +34,7 @@
     "site:preview": "bun run --cwd apps/docs preview",
     "site:typecheck": "bun run --cwd apps/docs typecheck",
     "test": "bun test packages",
-    "test:browser": "playwright test",
+    "test:browser": "bun run site:build && playwright test",
     "typecheck": "tsc --noEmit",
     "version:packages": "changeset version && bun install --lockfile-only",
     "release": "bun run build && changeset publish",

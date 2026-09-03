@@ -25,6 +25,7 @@
   --surface-selected: #202735;
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
     "Segoe UI", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --font-demo: "Noto Sans KR Variable", sans-serif;
   --font-code: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --space-2xs: 0.25rem;
   --space-xs: 0.5rem;
@@ -736,6 +737,7 @@ input[type="range"]:focus-visible {
 .line-break-headline-measure-source {
   width: min(100%, var(--line-break-measure, 70rem));
   margin: 0;
+  font-family: var(--font-demo);
   font-size: clamp(1.65rem, 5.8vw, 5rem);
   font-weight: 600;
   letter-spacing: -0.06em;
@@ -781,12 +783,10 @@ input[type="range"]:focus-visible {
   inset: -0.04em 0;
 }
 
-.line-break-piece.has-gap {
-  margin-left: 0.22em;
-}
-
-.line-break-headline[lang="ko"] .line-break-piece.has-gap {
-  margin-left: 0.14em;
+.line-break-gap {
+  display: inline-block;
+  flex: 0 0 auto;
+  white-space: pre;
 }
 
 .line-break-force {
@@ -869,7 +869,7 @@ input[type="range"]:focus-visible {
   flex: 1;
   place-items: center;
   min-width: 0;
-  padding: var(--space-xl) var(--space-lg);
+  padding: var(--space-xl) 1.25rem;
 }
 
 .headline-measure {
@@ -886,6 +886,7 @@ input[type="range"]:focus-visible {
 .demo-headline {
   margin: 0;
   color: var(--paper);
+  font-family: var(--font-demo);
   font-size: clamp(1.625rem, 5vw, 1.875rem);
   font-weight: 600;
   letter-spacing: -0.055em;
@@ -1238,6 +1239,7 @@ input[type="range"]::-moz-range-thumb {
   margin: 0;
   opacity: 0;
   pointer-events: none;
+  font-family: var(--font-demo);
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.035em;
@@ -1247,6 +1249,7 @@ input[type="range"]::-moz-range-thumb {
 
 .process-candidates {
   margin: 0;
+  font-family: var(--font-demo);
   font-size: clamp(1.6rem, 5vw, 2.75rem);
   font-weight: 600;
   letter-spacing: -0.055em;
@@ -1325,6 +1328,7 @@ input[type="range"]::-moz-range-thumb {
 
 .process-layout-option p {
   margin: 0;
+  font-family: var(--font-demo);
   font-size: clamp(0.875rem, 1.35vw, 1.0625rem);
   font-weight: 600;
   letter-spacing: -0.035em;
@@ -1394,6 +1398,7 @@ input[type="range"]::-moz-range-thumb {
 .process-selection-card > p {
   margin: 0;
   color: var(--ink-350);
+  font-family: var(--font-demo);
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.035em;
@@ -1617,7 +1622,7 @@ input[type="range"]::-moz-range-thumb {
   }
 
   .measure-pane-body {
-    padding: var(--space-2xl);
+    padding: var(--space-2xl) 2.875rem;
   }
 
   .demo-headline {

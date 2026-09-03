@@ -84,13 +84,22 @@ function useInitialLandingHash(enabled: boolean) {
     if (!enabled || !window.location.hash) return undefined;
 
     let frame = 0;
-    let settleFrame = 0;
+    let cancelled = false;
+    let attempts = 0;
+    let stableFrames = 0;
+    const root = document.documentElement;
+
+    const cancelAlignment = () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+
     const alignHashTarget = () => {
+      if (cancelled) return;
       const id = decodeURIComponent(window.location.hash.slice(1));
       const target = document.getElementById(id);
       if (!target) return;
 
-      const root = document.documentElement;
       const header = document.querySelector<HTMLElement>(".site-header");
       const alignmentTarget = id === "playground"
         ? document.getElementById("playground-title") ?? target
@@ -102,37 +111,36 @@ function useInitialLandingHash(enabled: boolean) {
       const alignmentGap = id === "playground" && Number.isFinite(alignmentMargin)
         ? alignmentMargin
         : 0;
-      let targetTop = 0;
-      let offsetNode: HTMLElement | null = alignmentTarget;
-      while (offsetNode) {
-        targetTop += offsetNode.offsetTop;
-        offsetNode = offsetNode.offsetParent as HTMLElement | null;
-      }
+      const delta = alignmentTarget.getBoundingClientRect().top - headerBottom - alignmentGap;
       const previousScrollBehavior = root.style.scrollBehavior;
       root.style.scrollBehavior = "auto";
       window.scrollTo({
         behavior: "auto",
-        top: Math.max(0, targetTop - headerBottom - alignmentGap),
+        top: Math.max(0, window.scrollY + delta),
       });
       root.style.scrollBehavior = previousScrollBehavior;
-    };
-    const scheduleAlignment = () => {
-      frame = window.requestAnimationFrame(() => {
-        alignHashTarget();
-        settleFrame = window.requestAnimationFrame(alignHashTarget);
-      });
+
+      attempts += 1;
+      stableFrames = Math.abs(delta) < 0.5 ? stableFrames + 1 : 0;
+      if (stableFrames < 2 && attempts < 60) {
+        frame = window.requestAnimationFrame(alignHashTarget);
+      }
     };
 
-    if (document.readyState === "complete") {
-      scheduleAlignment();
-    } else {
-      window.addEventListener("load", scheduleAlignment, { once: true });
+    const userEvents = ["keydown", "pointerdown", "touchstart", "wheel"] as const;
+    for (const eventName of userEvents) {
+      window.addEventListener(eventName, cancelAlignment, { passive: true, once: true });
     }
 
+    void document.fonts.ready.then(() => {
+      if (!cancelled) frame = window.requestAnimationFrame(alignHashTarget);
+    });
+
     return () => {
-      window.removeEventListener("load", scheduleAlignment);
-      window.cancelAnimationFrame(frame);
-      window.cancelAnimationFrame(settleFrame);
+      cancelAlignment();
+      for (const eventName of userEvents) {
+        window.removeEventListener(eventName, cancelAlignment);
+      }
     };
   }, [enabled]);
 }
@@ -271,6 +279,7 @@ function Playground({ locale }: { locale: SiteLocale }) {
         <div
           className={`measure-instrument${measureDragging ? " is-dragging" : ""}`}
           data-result={currentSelection?.applied ? "applied" : "native"}
+          data-semantic-phrase={currentExample.semanticPhrase}
         >
           <div className="headline-presets" role="group" aria-label={playground.presetLabel}>
             {examples.map((example, index) => (
@@ -550,6 +559,7 @@ function ProcessSelectionComparison({
     <div
       className="process-selection-comparison"
       data-result={selection.applied ? "applied" : "native"}
+      data-semantic-phrase={content.process.semanticPhrase}
       aria-label={content.process.selectionLabel}
     >
       <article className="process-selection-card is-native">

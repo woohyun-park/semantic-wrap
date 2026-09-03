@@ -3,6 +3,7 @@ import type { SiteLocale } from "./site-config";
 export type LineBreakExample = {
   id: string;
   text: string;
+  semanticPhrase: string;
   introMeasureEm: number;
   playgroundMeasures: readonly number[];
   nativeDescription: string;
@@ -33,6 +34,7 @@ export type LandingContent = {
   };
   process: {
     example: string;
+    semanticPhrase: string;
     selectionReason: string;
     title: string;
     lead: string;
@@ -74,7 +76,8 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       {
         id: "before",
         text: koreanHeadlines[0],
-        introMeasureEm: 11,
+        semanticPhrase: "도입하기 전에",
+        introMeasureEm: 13,
         playgroundMeasures: [414, 308, 240],
         nativeDescription: "CSS balance는 ‘전에’를 다음 줄로 밀어 조건을 나타내는 구절을 가릅니다.",
         semanticDescription: "‘도입하기 전에’를 같은 줄에 묶어 하나의 의미 단위로 유지합니다.",
@@ -82,7 +85,8 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       {
         id: "readable",
         text: koreanHeadlines[1],
-        introMeasureEm: 11,
+        semanticPhrase: "더 나은",
+        introMeasureEm: 12,
         playgroundMeasures: [414, 292, 240],
         nativeDescription: "CSS balance는 ‘더’를 앞줄에 남겨 ‘더 나은’이라는 수식 관계를 가릅니다.",
         semanticDescription: "‘더 나은’을 같은 줄에 두어 해결책을 꾸미는 의미를 유지합니다.",
@@ -90,8 +94,9 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       {
         id: "purpose",
         text: koreanHeadlines[2],
+        semanticPhrase: "만들기 위해",
         introMeasureEm: 11,
-        playgroundMeasures: [414, 308, 240],
+        playgroundMeasures: [414, 308, 246],
         nativeDescription: "CSS balance는 ‘만들기’와 ‘위해’를 서로 다른 줄에 두어 목적을 나타내는 표현을 가릅니다.",
         semanticDescription: "‘만들기 위해’를 같은 줄에 묶어 목적을 분명하게 전달합니다.",
       },
@@ -118,6 +123,7 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
     },
     process: {
       example: "효율적인 회의를 만들기 위해 버려야 할 습관",
+      semanticPhrase: "만들기 위해",
       selectionReason: "‘만들기 위해’를 한 줄에 묶어 목적을 분명하게 전달합니다.",
       title: "모델이 제안하고, 브라우저가 검증합니다.",
       lead: "모델이 찾은 의미 경계와 실제 렌더링 너비를 함께 비교해, 바꿀 가치가 있는 줄바꿈만 적용합니다.",
@@ -149,14 +155,16 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       {
         id: "readers",
         text: englishHeadlines[0],
-        introMeasureEm: 12,
-        playgroundMeasures: [414, 308, 240],
+        semanticPhrase: "for readers, not for reviewers",
+        introMeasureEm: 13,
+        playgroundMeasures: [418, 308, 246],
         nativeDescription: "CSS balance separates ‘for’ from the audience contrast it introduces.",
         semanticDescription: "The model keeps ‘for readers, not for reviewers’ together as one contrast.",
       },
       {
         id: "trust",
         text: englishHeadlines[1],
+        semanticPhrase: "before asking for more data",
         introMeasureEm: 12,
         playgroundMeasures: [414, 308, 240],
         nativeDescription: "CSS balance separates ‘before’ from the action it introduces.",
@@ -165,6 +173,7 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       {
         id: "audience",
         text: englishHeadlines[2],
+        semanticPhrase: "for people who need to act",
         introMeasureEm: 12,
         playgroundMeasures: [414, 308, 240],
         nativeDescription: "CSS balance separates ‘for’ from the audience it introduces.",
@@ -193,6 +202,7 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
     },
     process: {
       example: "Write clear headlines for readers, not for reviewers",
+      semanticPhrase: "for readers, not for reviewers",
       selectionReason: "The selected layout keeps the full contrast ‘for readers, not for reviewers’ together without sacrificing balance.",
       title: "The model proposes. The browser verifies.",
       lead: "semantic-wrap compares model-predicted boundaries with real rendered widths, then changes only the line breaks worth changing.",
