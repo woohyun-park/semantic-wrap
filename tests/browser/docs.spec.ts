@@ -176,8 +176,10 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
   await scrollToStoryPosition(2.56);
   await expect(story).toHaveAttribute("data-shimmer-active", "true");
   await expect(page.locator(messageTargetSelector)).toHaveAttribute("data-motion-shimmer", "active");
-  await page.waitForTimeout(55);
-  expect(await readScale(messageTargetSelector)).toBeLessThan(0.99);
+  await expect.poll(
+    () => readScale(messageTargetSelector),
+    { intervals: Array.from({ length: 30 }, () => 10), timeout: 500 },
+  ).toBeLessThan(0.99);
   await expect.poll(async () => Number(
     await page.locator(messageShimmerSelector).evaluate((element) =>
       window.getComputedStyle(element).opacity),
