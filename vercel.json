@@ -4,6 +4,17 @@
   "installCommand": "bunx bun@1.4.0 install --frozen-lockfile",
   "buildCommand": "bun run site:build",
   "outputDirectory": "apps/docs/dist",
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

@@ -485,7 +485,7 @@ function HeroScene({ content, direction, locale, staticScene }: SceneViewProps) 
       staticScene={staticScene}
     >
       <div className="hero-brand-content">
-        <BrandLockup className="hero-brand-lockup" />
+        <BrandLockup className="hero-brand-lockup" priority />
         <InstallCommand content={content} />
         <StartAction content={content} locale={locale} />
       </div>
