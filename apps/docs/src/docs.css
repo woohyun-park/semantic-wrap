@@ -1,6 +1,10 @@
 .docs-page {
+  --docs-header-height: 4.5rem;
+  --docs-sidebar-width: 15rem;
+  --docs-article-width: 40rem;
+  --docs-column-gap: clamp(2rem, 4vw, 4rem);
   min-height: 100vh;
-  padding-top: 4.5rem;
+  padding-top: var(--docs-header-height);
   background: var(--backdrop);
   color: var(--paper);
 }
@@ -11,12 +15,22 @@
 }
 
 .docs-mobile-index {
-  padding-top: var(--space-lg);
+  position: sticky;
+  z-index: calc(var(--z-sticky) - 1);
+  top: var(--docs-header-height);
+  padding-block: var(--space-sm);
+  background: var(--backdrop);
 }
 
 .docs-mobile-index details {
+  max-height: calc(100dvh - var(--docs-header-height) - var(--space-lg));
   border-block: 1px solid var(--line-strong);
   background: var(--ink-950);
+}
+
+.docs-mobile-index details[open] {
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .docs-mobile-index summary {
@@ -481,11 +495,19 @@
 
 @media (min-width: 48rem) {
   .docs-page {
-    padding-top: 4.75rem;
+    --docs-header-height: 4.75rem;
+  }
+
+  .docs-page .site-header-inner {
+    width: min(calc(100% - 2rem), var(--docs-article-width));
+  }
+
+  .docs-mobile-index {
+    width: min(calc(100% - 2rem), var(--docs-article-width));
   }
 
   .docs-article {
-    width: min(100%, 40rem);
+    width: min(100%, var(--docs-article-width));
     margin-inline: auto;
   }
 
@@ -496,21 +518,34 @@
 }
 
 @media (min-width: 64rem) {
+  .docs-page .site-header-inner {
+    display: grid;
+    width: min(calc(100% - 2rem), 92rem);
+    grid-template-columns: var(--docs-sidebar-width) minmax(0, var(--docs-article-width));
+    gap: var(--docs-column-gap);
+    justify-content: center;
+  }
+
+  .docs-page .site-header-content {
+    grid-column: 1 / -1;
+    margin-left: var(--space-sm);
+  }
+
   .docs-mobile-index {
     display: none;
   }
 
   .docs-grid {
-    grid-template-columns: 15rem minmax(0, 40rem);
-    gap: clamp(2rem, 4vw, 4rem);
+    grid-template-columns: var(--docs-sidebar-width) minmax(0, var(--docs-article-width));
+    gap: var(--docs-column-gap);
     justify-content: center;
   }
 
   .docs-sidebar {
     position: sticky;
-    top: 4.75rem;
+    top: var(--docs-header-height);
     display: block;
-    height: calc(100vh - 4.75rem);
+    height: calc(100vh - var(--docs-header-height));
     overflow-y: auto;
     padding: var(--space-xl) var(--space-lg) var(--space-3xl) 0;
     border-right: 1px solid var(--line);

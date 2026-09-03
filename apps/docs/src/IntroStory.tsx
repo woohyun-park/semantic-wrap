@@ -14,6 +14,7 @@ import {
   AnimatePresence,
   LayoutGroup,
   motion,
+  useAnimationControls,
   useMotionValueEvent,
   useReducedMotion,
   useScroll,
@@ -425,17 +426,6 @@ function LineBreakHeadline({
                 aria-hidden="true"
               >
                 {shimmerTarget ? <ShimmerText run={run}>{token.text}</ShimmerText> : token.text}
-                {hasBreak ? (
-                  <motion.span
-                    className="gradient-text-safe line-break-marker"
-                    initial={staticScene ? false : { opacity: 0, scale: 0.8, y: "0.08em" }}
-                    animate={{ opacity: 1, scale: 1, y: "0.08em" }}
-                    transition={{ duration: 0.18, ease: easeOutExpo }}
-                    aria-hidden="true"
-                  >
-                    ↵
-                  </motion.span>
-                ) : null}
               </motion.span>
               {hasBreak ? <span className="line-break-force" aria-hidden="true" /> : null}
             </Fragment>
@@ -459,6 +449,28 @@ type SceneViewProps = {
   staticScene?: boolean;
 };
 
+function HeroScrollCue({ staticScene }: { staticScene: boolean }) {
+  const controls = useAnimationControls();
+
+  useEffect(() => {
+    controls.set({ opacity: 0.58, y: 0 });
+    if (staticScene) return undefined;
+
+    void controls.start({
+      opacity: [0.58, 1, 0.58],
+      y: [0, 6, 0],
+      transition: { duration: 1.8, ease: easeOutQuint, repeat: Infinity },
+    });
+    return () => controls.stop();
+  }, [controls, staticScene]);
+
+  return (
+    <div className="hero-scroll-cue" aria-hidden="true">
+      <motion.span animate={controls} initial={false}>↓</motion.span>
+    </div>
+  );
+}
+
 function HeroScene({ content, direction, locale, staticScene }: SceneViewProps) {
   return (
     <SceneFrame
@@ -471,14 +483,7 @@ function HeroScene({ content, direction, locale, staticScene }: SceneViewProps) 
         <InstallCommand content={content} />
         <StartAction content={content} locale={locale} />
       </div>
-      <div className="hero-scroll-cue" aria-hidden="true">
-        <motion.span
-          animate={staticScene ? undefined : { opacity: [0.58, 1, 0.58], y: [0, 6, 0] }}
-          transition={{ duration: 1.8, ease: easeOutQuint, repeat: Infinity }}
-        >
-          ↓
-        </motion.span>
-      </div>
+      <HeroScrollCue staticScene={Boolean(staticScene)} />
     </SceneFrame>
   );
 }

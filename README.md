@@ -1,5 +1,6 @@
 <div align="center">
-  <img src="./assets/semantic-wrap.webp" alt="semantic-wrap" />
+  <img src="./assets/semantic-wrap-lockup.webp" alt="semantic-wrap" />
+  <br />
   <p>
     <a href="https://www.npmjs.com/package/@semantic-wrap/core"><img src="https://img.shields.io/npm/v/@semantic-wrap/core.svg?style=flat-square&colorA=000&colorB=000" alt="npm version" /></a>
     <a href="https://www.npmjs.com/package/@semantic-wrap/core"><img src="https://img.shields.io/npm/dm/@semantic-wrap/core.svg?style=flat-square&colorA=000&colorB=000" alt="npm downloads" /></a>

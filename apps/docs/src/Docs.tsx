@@ -7,6 +7,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { animate, type AnimationPlaybackControls } from "motion";
 import {
   CopyIcon,
   SiteFooter,
@@ -385,12 +386,25 @@ function getNavigationGroups(locale: SiteLocale) {
   ];
 }
 
+function getDocsTargetScrollY(target: HTMLElement) {
+  const scrollMarginTop = Number.parseFloat(
+    window.getComputedStyle(target).scrollMarginTop,
+  ) || 0;
+
+  return Math.min(
+    Math.max(0, window.scrollY + target.getBoundingClientRect().top - scrollMarginTop),
+    Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+  );
+}
+
 function useActiveDocsHref(locale: SiteLocale) {
   const introductionPath = docsPath(locale);
   const navigationLinks = useMemo(
     () => getNavigationGroups(locale).flatMap((group) => group.links),
     [locale],
   );
+  const navigationAnimationRef = useRef<AnimationPlaybackControls | null>(null);
+  const restoreScrollBehaviorRef = useRef<(() => void) | null>(null);
   const navigationTargetIdRef = useRef<string | null>(null);
   const [activeHref, setActiveHref] = useState(() => {
     const candidate = `${introductionPath}${window.location.hash}`;
@@ -407,13 +421,7 @@ function useActiveDocsHref(locale: SiteLocale) {
       if (navigationTargetId) {
         const target = document.getElementById(navigationTargetId);
         if (target) {
-          const scrollMarginTop = Number.parseFloat(
-            window.getComputedStyle(target).scrollMarginTop,
-          ) || 0;
-          const targetScrollY = Math.min(
-            Math.max(0, window.scrollY + target.getBoundingClientRect().top - scrollMarginTop),
-            Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
-          );
+          const targetScrollY = getDocsTargetScrollY(target);
 
           if (Math.abs(window.scrollY - targetScrollY) > 2) return;
         }
@@ -444,6 +452,9 @@ function useActiveDocsHref(locale: SiteLocale) {
     };
     const cancelNavigationTarget = () => {
       if (!navigationTargetIdRef.current) return;
+      navigationAnimationRef.current?.stop();
+      navigationAnimationRef.current = null;
+      restoreScrollBehaviorRef.current?.();
       navigationTargetIdRef.current = null;
       scheduleActiveHrefSync();
     };
@@ -454,6 +465,9 @@ function useActiveDocsHref(locale: SiteLocale) {
       }
     };
     const syncHistoryNavigation = () => {
+      navigationAnimationRef.current?.stop();
+      navigationAnimationRef.current = null;
+      restoreScrollBehaviorRef.current?.();
       navigationTargetIdRef.current = null;
       scheduleActiveHrefSync();
     };
@@ -475,13 +489,58 @@ function useActiveDocsHref(locale: SiteLocale) {
       window.removeEventListener("keydown", cancelNavigationTargetOnKeydown);
       window.removeEventListener("hashchange", syncHistoryNavigation);
       window.removeEventListener("popstate", syncHistoryNavigation);
+      navigationAnimationRef.current?.stop();
+      restoreScrollBehaviorRef.current?.();
       if (animationFrame !== 0) window.cancelAnimationFrame(animationFrame);
     };
   }, [introductionPath, navigationLinks]);
 
   const navigateToHref = useCallback((href: string, targetId: string) => {
+    navigationAnimationRef.current?.stop();
+    navigationAnimationRef.current = null;
+    restoreScrollBehaviorRef.current?.();
     navigationTargetIdRef.current = targetId;
     setActiveHref(href);
+
+    const target = document.getElementById(targetId);
+    if (!target) {
+      navigationTargetIdRef.current = null;
+      return;
+    }
+
+    const targetScrollY = getDocsTargetScrollY(target);
+    const distance = Math.abs(targetScrollY - window.scrollY);
+    if (
+      distance <= 2
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      document.documentElement.scrollTop = targetScrollY;
+      navigationTargetIdRef.current = null;
+      return;
+    }
+
+    const root = document.documentElement;
+    const previousScrollBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = "auto";
+    restoreScrollBehaviorRef.current = () => {
+      root.style.scrollBehavior = previousScrollBehavior;
+      restoreScrollBehaviorRef.current = null;
+    };
+
+    const navigationAnimation = animate(window.scrollY, targetScrollY, {
+      duration: Math.min(0.8, Math.max(0.35, distance / 9_000)),
+      ease: [0.22, 1, 0.36, 1],
+      onUpdate: (scrollY) => {
+        document.documentElement.scrollTop = scrollY;
+      },
+      onComplete: () => {
+        if (navigationAnimationRef.current !== navigationAnimation) return;
+        navigationAnimationRef.current = null;
+        navigationTargetIdRef.current = null;
+        restoreScrollBehaviorRef.current?.();
+      },
+    });
+    navigationAnimationRef.current = navigationAnimation;
   }, []);
 
   return { activeHref, navigateToHref };
@@ -558,17 +617,11 @@ function DocsNavigation({
     if (!target) return;
 
     event.preventDefault();
+    event.currentTarget.closest("details")?.removeAttribute("open");
     onNavigate(href, targetId);
     if (`${window.location.pathname}${window.location.hash}` !== `${url.pathname}${url.hash}`) {
       window.history.pushState(null, "", `${url.pathname}${url.hash}`);
     }
-    target.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-      block: "start",
-    });
-    event.currentTarget.closest("details")?.removeAttribute("open");
   }
 
   return (
