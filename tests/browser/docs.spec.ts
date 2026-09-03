@@ -37,6 +37,26 @@ test("keeps the Korean landing and docs available under the ko prefix", async ({
   await expect(page.locator('.main-nav a[href="/"]')).toHaveText("EN");
 });
 
+test("honors direct landing section hashes after React mounts", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  for (const url of [
+    `${englishLandingUrl}#playground`,
+    `${landingUrl}#playground`,
+  ]) {
+    await page.goto(url);
+
+    await expect.poll(async () => page.locator("#playground-title").evaluate((element) => {
+      const headerBottom = document.querySelector(".site-header")
+        ?.getBoundingClientRect().bottom ?? 0;
+      const headingGap = Number.parseFloat(
+        window.getComputedStyle(element).scrollMarginTop,
+      );
+      return Math.abs(element.getBoundingClientRect().top - headerBottom - headingGap);
+    })).toBeLessThan(2);
+  }
+});
+
 test("aligns the documentation header with the sidebar label and article edge", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(docsUrl);

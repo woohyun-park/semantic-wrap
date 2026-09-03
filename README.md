@@ -19,6 +19,12 @@ Both the model and the selection strategy are replaceable, and experimental pres
 available for English and Korean titles. The project began as an attempt to reproduce the line
 breaks that feel natural when reading Korean text.
 
+## Playground
+
+<a href="https://semantic-wrap.woohyunpark.xyz/#playground">
+  <img src="./assets/playground-preview.webp" alt="Open the interactive playground comparing CSS balance and semantic-wrap with the same English headline and width" />
+</a>
+
 ## Examples
 
 | Browser native wrapping | semantic-wrap |

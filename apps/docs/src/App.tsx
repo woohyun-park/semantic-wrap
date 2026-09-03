@@ -79,6 +79,64 @@ function useMeasureWidth(paneBodyRef: RefObject<HTMLDivElement | null>) {
   return { maxWidth, setWidth, width };
 }
 
+function useInitialLandingHash(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled || !window.location.hash) return undefined;
+
+    let frame = 0;
+    let settleFrame = 0;
+    const alignHashTarget = () => {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      const target = document.getElementById(id);
+      if (!target) return;
+
+      const root = document.documentElement;
+      const header = document.querySelector<HTMLElement>(".site-header");
+      const alignmentTarget = id === "playground"
+        ? document.getElementById("playground-title") ?? target
+        : target;
+      const headerBottom = header?.getBoundingClientRect().bottom ?? 0;
+      const alignmentMargin = Number.parseFloat(
+        window.getComputedStyle(alignmentTarget).scrollMarginTop,
+      );
+      const alignmentGap = id === "playground" && Number.isFinite(alignmentMargin)
+        ? alignmentMargin
+        : 0;
+      let targetTop = 0;
+      let offsetNode: HTMLElement | null = alignmentTarget;
+      while (offsetNode) {
+        targetTop += offsetNode.offsetTop;
+        offsetNode = offsetNode.offsetParent as HTMLElement | null;
+      }
+      const previousScrollBehavior = root.style.scrollBehavior;
+      root.style.scrollBehavior = "auto";
+      window.scrollTo({
+        behavior: "auto",
+        top: Math.max(0, targetTop - headerBottom - alignmentGap),
+      });
+      root.style.scrollBehavior = previousScrollBehavior;
+    };
+    const scheduleAlignment = () => {
+      frame = window.requestAnimationFrame(() => {
+        alignHashTarget();
+        settleFrame = window.requestAnimationFrame(alignHashTarget);
+      });
+    };
+
+    if (document.readyState === "complete") {
+      scheduleAlignment();
+    } else {
+      window.addEventListener("load", scheduleAlignment, { once: true });
+    }
+
+    return () => {
+      window.removeEventListener("load", scheduleAlignment);
+      window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(settleFrame);
+    };
+  }, [enabled]);
+}
+
 function renderWithBreaks(text: string, breaks: readonly number[]): ReactNode {
   if (breaks.length === 0) return text;
 
@@ -665,6 +723,8 @@ export function App() {
     || window.location.pathname.startsWith("/docs/")
     || window.location.pathname === "/ko/docs"
     || window.location.pathname.startsWith("/ko/docs/");
+
+  useInitialLandingHash(!isDocs);
 
   useEffect(() => {
     const canonicalPath = isDocs ? docsPath(locale) : landingPath(locale);

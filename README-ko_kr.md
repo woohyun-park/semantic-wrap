@@ -21,6 +21,12 @@ JavaScript 라이브러리입니다. 모델이 찾은 경계 후보와 브라우
 Core는 특정 언어에 종속되지 않으며, 현재 영어 제목용 `@semantic-wrap/en`과 한국어
 제목용 `@semantic-wrap/ko` 프리셋을 제공합니다.
 
+## Playground
+
+<a href="https://semantic-wrap.woohyunpark.xyz/ko#playground">
+  <img src="./assets/playground-preview-ko.webp" alt="인터랙티브 Playground 열기: 같은 한국어 제목과 너비에서 CSS balance와 semantic-wrap 비교" />
+</a>
+
 ## 결과 예시
 
 | 브라우저의 기본 줄바꿈 | semantic-wrap |

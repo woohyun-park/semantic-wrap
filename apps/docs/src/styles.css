@@ -1162,6 +1162,10 @@ input[type="range"]::-moz-range-thumb {
   word-break: keep-all;
 }
 
+#playground-title {
+  scroll-margin-top: var(--space-2xl);
+}
+
 .process-workbench {
   display: grid;
   gap: var(--space-2xl);
