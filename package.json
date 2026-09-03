@@ -14,6 +14,7 @@
     "url": "https://github.com/woohyun-park/semantic-wrap/issues"
   },
   "workspaces": [
+    "apps/*",
     "packages/*"
   ],
   "scripts": {
@@ -28,6 +29,10 @@
     "publish:ko": "npm publish --workspace @semantic-wrap/ko --access public",
     "publish:react": "npm publish --workspace @semantic-wrap/react --access public",
     "smoke:packages": "node scripts/verify-package-consumer.mjs",
+    "site:build": "bun run --cwd apps/docs build",
+    "site:dev": "bun run --cwd apps/docs dev",
+    "site:preview": "bun run --cwd apps/docs preview",
+    "site:typecheck": "bun run --cwd apps/docs typecheck",
     "test": "bun test packages",
     "test:browser": "playwright test",
     "typecheck": "tsc --noEmit",

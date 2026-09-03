@@ -24,12 +24,22 @@ export default defineConfig({
       use: { ...devices["Desktop Safari"] },
     },
   ],
-  webServer: {
-    command: "bun tests/browser/server.ts",
-    url: "http://127.0.0.1:4191",
-    reuseExistingServer: false,
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: "bun tests/browser/server.ts",
+      url: "http://127.0.0.1:4191",
+      reuseExistingServer: false,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 120_000,
+    },
+    {
+      command: "bun run --cwd apps/docs dev --host 127.0.0.1 --port 4192 --strictPort",
+      url: "http://127.0.0.1:4192",
+      reuseExistingServer: false,
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 120_000,
+    },
+  ],
 });

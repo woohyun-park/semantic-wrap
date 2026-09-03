@@ -117,3 +117,13 @@ test("measures fonts whose computed shorthand is empty", async ({ page }) => {
   await expect(delta).not.toHaveText("");
   expect(Number(await delta.textContent())).toBeLessThan(0.5);
 });
+
+test("applies the Korean process example at the documented measure", async ({ page }) => {
+  await page.goto("/");
+
+  const status = page.locator("#ko-applied-status");
+  await expect(status).toHaveAttribute("data-applied", "true");
+  await expect(status).toHaveText(
+    "디자인 시스템을 도입하기 전에\n반드시 확인해야 할 기준",
+  );
+});
