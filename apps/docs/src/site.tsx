@@ -58,7 +58,7 @@ export function BrandMark() {
 export function Wordmark() {
   return (
     <span className="wordmark" aria-label="semantic-wrap">
-      semantic-<span>wrap</span>
+      semantic-<span className="gradient-text-safe">wrap</span>
     </span>
   );
 }

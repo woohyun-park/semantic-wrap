@@ -273,7 +273,7 @@ function InstallCommand({ content }: { content: LandingContent }) {
       animate={copyState === "copied" ? { scale: [1, 0.97, 1] } : { scale: 1 }}
       transition={{ duration: 0.26, ease: easeOutExpo }}
     >
-      <code><span aria-hidden="true">~ </span>{content.intro.installCommand}</code>
+      <code><span className="gradient-text-safe" aria-hidden="true">~ </span>{content.intro.installCommand}</code>
       <span className="quick-install-icon" aria-hidden="true">
         <AnimatePresence initial={false} mode="wait">
           <motion.span
@@ -361,7 +361,7 @@ function LineBreakHeadline({
             {index === breakAfter ? (
               <Fragment>
                 <motion.span
-                  className="line-break-marker"
+                  className="gradient-text-safe line-break-marker"
                   initial={staticScene ? false : { opacity: 0, scale: 0.8, y: "0.08em" }}
                   animate={{ opacity: 1, scale: 1, y: "0.08em" }}
                   transition={{ duration: 0.18, ease: easeOutExpo }}

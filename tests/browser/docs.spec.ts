@@ -37,6 +37,20 @@ test("keeps the Korean landing and docs available under the ko prefix", async ({
   await expect(page.locator('.main-nav a[href="/"]')).toHaveText("EN");
 });
 
+test("keeps the process section white while the surrounding page surfaces stay black", async ({ page }) => {
+  await page.goto(englishLandingUrl);
+
+  await expect(page.locator(".process-section")).toHaveCSS("background-color", "rgb(251, 251, 251)");
+  await expect(page.locator(".playground-section")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await expect(page.locator(".site-footer")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+
+  await page.goto(englishDocsUrl);
+  await expect(page.locator(".docs-page")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+
+  await page.goto(docsUrl);
+  await expect(page.locator(".docs-page")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+});
+
 test("moves the document without letting sidebar centering override the anchor", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(docsUrl);
@@ -128,7 +142,7 @@ test("shows an actual semantic before and after in the process", async ({ page }
       return Math.round(paragraph.getBoundingClientRect().height / lineHeight);
     }),
   );
-  expect(visualLineCounts.length).toBeGreaterThan(0);
+  expect(visualLineCounts).toHaveLength(4);
   expect(visualLineCounts.every((lineCount) => lineCount === 2)).toBe(true);
 
   await page.locator('.process-list [data-process-step="2"] button').click();
@@ -148,6 +162,134 @@ test("shows an actual semantic before and after in the process", async ({ page }
   );
   await expect(comparison.locator(".process-selection-reason")).toHaveCount(0);
   await expect(page.locator(".process-stage-status")).toContainText("목적을 분명하게");
+});
+
+test("keeps the English process candidates and result on the same two-line premise", async ({ page }) => {
+  await page.goto(englishLandingUrl);
+  await page.locator('.process-list [data-process-step="1"] button').click();
+
+  const visualLineCounts = await page.locator(".process-layout-option p").evaluateAll(
+    (paragraphs) => paragraphs.map((paragraph) => {
+      const lineHeight = Number.parseFloat(window.getComputedStyle(paragraph).lineHeight);
+      return Math.round(paragraph.getBoundingClientRect().height / lineHeight);
+    }),
+  );
+  expect(visualLineCounts).toHaveLength(4);
+  expect(visualLineCounts.every((lineCount) => lineCount === 2)).toBe(true);
+
+  await page.locator('.process-list [data-process-step="2"] button').click();
+
+  const comparison = page.locator(".process-selection-comparison");
+  await expect(comparison).toHaveAttribute("data-result", "applied");
+  expect(await comparison.locator(".is-native p").innerText()).toBe(
+    "Write clear headlines for readers, not for\nreviewers",
+  );
+  expect(await comparison.locator(".is-semantic p").innerText()).toBe(
+    "Write clear headlines for readers,\nnot for reviewers",
+  );
+});
+
+test("leaves room for the English shimmer overlay at display size", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 3928, height: 1823 });
+  await page.goto(englishLandingUrl);
+
+  const target = page.locator(".intro-message-highlight .text-shimmer-target");
+  const overlay = target.locator(".text-shimmer");
+  await expect(overlay).toHaveCSS("overflow", "visible");
+  const spacing = await target.evaluate((element) => {
+    const styles = window.getComputedStyle(element);
+    return {
+      paddingBlockStart: Number.parseFloat(styles.paddingBlockStart),
+      paddingInlineEnd: Number.parseFloat(styles.paddingInlineEnd),
+    };
+  });
+  expect(spacing.paddingBlockStart).toBeGreaterThan(0);
+  expect(spacing.paddingInlineEnd).toBeGreaterThan(0);
+});
+
+test("keeps every gradient text paint box inside its clipping ancestors", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 800, height: 900 },
+    { width: 1280, height: 900 },
+    { width: 3928, height: 1823 },
+  ]) {
+    await page.setViewportSize(viewport);
+
+    for (const url of [englishLandingUrl, landingUrl]) {
+      await page.goto(url);
+
+      const violations = await page.locator(".gradient-text-safe").evaluateAll((elements) => {
+        const tolerance = 1;
+        const failures: string[] = [];
+
+        for (const [index, element] of elements.entries()) {
+          const styles = window.getComputedStyle(element);
+          const bounds = element.getBoundingClientRect();
+          if (styles.display === "none" || bounds.width === 0 || bounds.height === 0) continue;
+
+          const hasPaintPadding = [
+            styles.paddingBlockStart,
+            styles.paddingBlockEnd,
+            styles.paddingInlineStart,
+            styles.paddingInlineEnd,
+          ].every((value) => Number.parseFloat(value) > 0);
+          if (!hasPaintPadding || !styles.backgroundClip.includes("text")) {
+            failures.push(`${index}: missing paint-safe styles`);
+          }
+
+          let ancestor = element.parentElement;
+          while (ancestor) {
+            const ancestorStyles = window.getComputedStyle(ancestor);
+            const ancestorBounds = ancestor.getBoundingClientRect();
+            const clipsX = ["clip", "hidden"].includes(ancestorStyles.overflowX)
+              || ancestorStyles.contain.includes("paint");
+            const clipsY = ["clip", "hidden"].includes(ancestorStyles.overflowY)
+              || ancestorStyles.contain.includes("paint");
+
+            if (clipsX && (
+              bounds.left < ancestorBounds.left - tolerance
+              || bounds.right > ancestorBounds.right + tolerance
+            )) {
+              failures.push(`${index}: clipped inline by ${ancestor.className || ancestor.tagName}`);
+              break;
+            }
+            if (clipsY && (
+              bounds.top < ancestorBounds.top - tolerance
+              || bounds.bottom > ancestorBounds.bottom + tolerance
+            )) {
+              failures.push(`${index}: clipped block by ${ancestor.className || ancestor.tagName}`);
+              break;
+            }
+
+            ancestor = ancestor.parentElement;
+          }
+        }
+
+        return failures;
+      });
+
+      expect(violations, `${url} at ${viewport.width}px`).toEqual([]);
+    }
+  }
+});
+
+test("keeps every English semantic intro example to two visual lines", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 800, height: 450 });
+  await page.goto(englishLandingUrl);
+
+  const lineCounts = await page
+    .locator('.line-break-composition[data-semantic="true"] .line-break-headline')
+    .evaluateAll((headlines) => headlines.map((headline) => {
+      const lineHeight = Number.parseFloat(window.getComputedStyle(headline).lineHeight);
+      return Math.round(headline.getBoundingClientRect().height / lineHeight);
+    }));
+
+  expect(lineCounts).toEqual([2, 2, 2]);
 });
 
 test("keeps the desktop process panels at one shared height", async ({ page }) => {
@@ -332,7 +474,7 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
   await expect(story).not.toHaveAttribute("data-shimmer-active", "true");
 });
 
-test("centers the main headline independently from its context", async ({ page }) => {
+test("places the main headline slightly below center independently from its context", async ({ page }) => {
   for (const viewport of [
     { width: 1280, height: 720 },
     { width: 390, height: 620 },
@@ -351,8 +493,9 @@ test("centers the main headline independently from its context", async ({ page }
     const context = await scene.locator(".line-break-scene-context").boundingBox();
     expect(headline).not.toBeNull();
     expect(context).not.toBeNull();
-    expect(Math.abs((headline?.y ?? 0) + (headline?.height ?? 0) / 2 - viewport.height / 2))
-      .toBeLessThan(2);
+    const centerOffset = (headline?.y ?? 0) + (headline?.height ?? 0) / 2 - viewport.height / 2;
+    expect(centerOffset).toBeGreaterThan(8);
+    expect(centerOffset).toBeLessThan(viewport.height * 0.06);
     expect((context?.y ?? 0) + (context?.height ?? 0)).toBeLessThan(headline?.y ?? 0);
   }
 });

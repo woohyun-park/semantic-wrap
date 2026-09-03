@@ -1,7 +1,7 @@
 .docs-page {
   min-height: 100vh;
   padding-top: 4.5rem;
-  background: var(--ink-1000);
+  background: var(--backdrop);
   color: var(--paper);
 }
 

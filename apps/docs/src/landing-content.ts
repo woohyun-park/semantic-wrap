@@ -35,6 +35,8 @@ export type LandingContent = {
     widthValue: (width: number) => string;
   };
   process: {
+    example: string;
+    selectionReason: string;
     title: string;
     lead: string;
     ariaLabel: string;
@@ -64,8 +66,8 @@ const koreanHeadlines = [
 ] as const;
 
 const englishHeadlines = [
-  "Strong teams disagree openly while keeping the shared goal visible",
-  "Security decisions work better when they begin during product design",
+  "Solve the right problem before building a solution",
+  "Ship the smallest change that solves the whole problem",
   "Write headlines for readers not for internal approval",
 ] as const;
 
@@ -125,6 +127,8 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       widthValue: (width) => `${width}픽셀`,
     },
     process: {
+      example: koreanHeadlines[2],
+      selectionReason: "‘만들기 위해’를 한 줄에 묶어 목적을 분명하게 전달합니다.",
       title: "모델이 제안하고, 브라우저가 검증합니다.",
       lead: "모델이 찾은 의미 경계와 실제 렌더링 너비를 함께 비교해, 바꿀 가치가 있는 줄바꿈만 적용합니다.",
       ariaLabel: "작동 방식 실시간 미리보기",
@@ -154,24 +158,24 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
     demoHeadlines: englishHeadlines,
     examples: [
       {
-        id: "teams",
+        id: "problem",
         text: englishHeadlines[0],
-        pieces: ["Strong teams disagree openly", "while", "keeping the shared goal visible"],
+        pieces: ["Solve the right problem", "before", "building a solution"],
         nativeBreakAfter: 1,
         semanticBreakAfter: 0,
         focusIndex: 1,
-        nativeDescription: "The native wrap separates ‘while’ from the phrase it introduces.",
-        semanticDescription: "The model keeps ‘while keeping’ together as one meaningful phrase.",
+        nativeDescription: "The native wrap separates ‘before’ from the action it introduces.",
+        semanticDescription: "The model keeps ‘before building’ together as one meaningful phrase.",
       },
       {
-        id: "security",
+        id: "change",
         text: englishHeadlines[1],
-        pieces: ["Security decisions work better", "when", "they begin during product design"],
+        pieces: ["Ship the smallest change", "that", "solves the whole problem"],
         nativeBreakAfter: 1,
         semanticBreakAfter: 0,
         focusIndex: 1,
-        nativeDescription: "The native wrap strands ‘when’ at the end of the first line.",
-        semanticDescription: "The model keeps the condition ‘when they begin’ together.",
+        nativeDescription: "The native wrap separates ‘that’ from the clause it introduces.",
+        semanticDescription: "The model keeps ‘that solves’ together as one meaningful clause.",
       },
       {
         id: "readers",
@@ -205,6 +209,8 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       widthValue: (width) => `${width} pixels`,
     },
     process: {
+      example: "Write clear headlines for readers, not for reviewers",
+      selectionReason: "The selected layout keeps the contrast ‘not for reviewers’ together without sacrificing balance.",
       title: "The model proposes. The browser verifies.",
       lead: "semantic-wrap compares model-predicted boundaries with real rendered widths, then changes only the line breaks worth changing.",
       ariaLabel: "Live preview of how semantic-wrap works",

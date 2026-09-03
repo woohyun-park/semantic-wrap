@@ -105,7 +105,7 @@ export function ShimmerText({
   return (
     <motion.span
       animate={target}
-      className="text-shimmer-target"
+      className="gradient-text-safe text-shimmer-target"
       data-motion-shimmer={active ? "active" : "idle"}
       initial={false}
     >

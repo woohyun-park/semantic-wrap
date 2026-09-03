@@ -126,7 +126,7 @@ function renderSemanticDiff(
       const changed = isWord && lineIndexAt(partStart, nativeBreaks) !== semanticLineIndex;
       content.push(
         changed ? (
-          <span className="semantic-diff-changed" key={`changed-${partStart}`}>{part}</span>
+          <span className="gradient-text-safe semantic-diff-changed" key={`changed-${partStart}`}>{part}</span>
         ) : (
           <Fragment key={`text-${partStart}`}>{part}</Fragment>
         ),
@@ -216,7 +216,7 @@ function Playground({ locale }: { locale: SiteLocale }) {
                 aria-pressed={index === headlineIndex}
                 onClick={() => setHeadlineIndex(index)}
               >
-                <span>{playground.example} 0{index + 1}</span>
+                <span className="gradient-text-safe">{playground.example} 0{index + 1}</span>
                 <SemanticWrap model={model}>
                   <strong>{headline}</strong>
                 </SemanticWrap>
@@ -227,7 +227,7 @@ function Playground({ locale }: { locale: SiteLocale }) {
           <div className="measure-comparison">
             <article className="measure-pane is-browser" aria-labelledby="browser-measure-label">
               <div className="measure-pane-head">
-                <span id="browser-measure-label"><b>01</b> {playground.browser}</span>
+                <span id="browser-measure-label"><b className="gradient-text-safe">01</b> {playground.browser}</span>
                 <span>{playground.lines(nativeLineCount)}</span>
               </div>
               <div className="measure-pane-body" ref={paneBodyRef}>
@@ -254,8 +254,8 @@ function Playground({ locale }: { locale: SiteLocale }) {
 
             <article className="measure-pane is-semantic" aria-labelledby="semantic-measure-label">
               <div className="measure-pane-head">
-                <span id="semantic-measure-label"><b>02</b> {playground.semantic}</span>
-                <span>{playground.lines(semanticLineCount)}</span>
+                <span className="gradient-text-safe" id="semantic-measure-label"><b>02</b> {playground.semantic}</span>
+                <span className="gradient-text-safe">{playground.lines(semanticLineCount)}</span>
               </div>
               <div className="measure-pane-body">
                 <div className="headline-measure" style={{ width: `${width}px` }}>
@@ -375,7 +375,7 @@ function ProcessCandidates({
           <span>{segment.text}</span>
           {segment.candidate ? (
             <i
-              className={segment.candidate.level === null ? "is-fallback" : "is-predicted"}
+              className={`gradient-text-safe ${segment.candidate.level === null ? "is-fallback" : "is-predicted"}`}
               title={
                 segment.candidate.level === null
                   ? content.process.fallbackCandidate
@@ -411,6 +411,7 @@ function ProcessLayoutOptions({
   return (
     <div
       className="process-layout-options"
+      lang={locale}
       aria-label={content.process.layoutLabel}
     >
       {layouts.map((entry, index) => {
@@ -428,7 +429,7 @@ function ProcessLayoutOptions({
               repeat: Infinity,
             }}
           >
-            <span className="process-layout-id">{entry.id}</span>
+            <span className="gradient-text-safe process-layout-id">{entry.id}</span>
             <p lang={locale}>
               {entry.layout.lines.map((line, lineIndex) => (
                 <Fragment key={`${entry.id}-${lineIndex}-${line}`}>
@@ -489,9 +490,9 @@ function ProcessSelectionComparison({
 
 function ProcessStage({ activeStep, locale }: { activeStep: number; locale: SiteLocale }) {
   const content = landingContent[locale];
-  const processExampleText = content.demoHeadlines[2];
-  const processSemanticReason = content.examples[2]?.semanticDescription ?? content.process.nativeKept;
-  const processMeasureWidth = locale === "ko" ? 220 : 300;
+  const processExampleText = content.process.example;
+  const processSemanticReason = content.process.selectionReason;
+  const processMeasureWidth = locale === "ko" ? 220 : 345;
   const { ref, selection, diagnostics } = useSemanticWrap({
     text: processExampleText,
     model: titleModels[locale],
@@ -525,7 +526,7 @@ function ProcessStage({ activeStep, locale }: { activeStep: number; locale: Site
       {...revealMotion}
     >
       <div className="process-stage-head">
-        <strong>0{activeStep + 1} / 03</strong>
+        <strong className="gradient-text-safe">0{activeStep + 1} / 03</strong>
       </div>
       <p
         className="process-measure-source"
@@ -620,7 +621,7 @@ function ProcessSection({ locale }: { locale: SiteLocale }) {
                   onFocus={() => setActiveStep(index)}
                   onPointerEnter={() => setActiveStep(index)}
                 >
-                  <span className="process-number">{step.number}</span>
+                  <span className="gradient-text-safe process-number">{step.number}</span>
                   <span className="process-step-copy">
                     <LocalizedSemanticWrap locale={locale}>
                       <strong>{step.title}</strong>

@@ -1002,10 +1002,10 @@ function EnglishIntroductionArticle() {
           <caption>Browser-native and semantic-wrap results</caption>
           <thead><tr><th>Browser native wrapping</th><th>semantic-wrap</th></tr></thead>
           <tbody>
-            <tr><td>Strong teams disagree openly while<br />keeping the shared goal visible</td><td>Strong teams disagree openly<br />while keeping the shared goal visible</td></tr>
+            <tr><td>Solve the right problem before<br />building a solution</td><td>Solve the right problem<br />before building a solution</td></tr>
             <tr><td>Before adding another feature,<br />understand the behavior it should change</td><td>Before adding another feature,<br />understand the behavior<br />it should change</td></tr>
             <tr><td>The best design systems create consistency<br />without blocking local needs</td><td>The best design systems<br />create consistency without blocking local needs</td></tr>
-            <tr><td>Security decisions work better when<br />they begin during product design</td><td>Security decisions work better<br />when they begin during product design</td></tr>
+            <tr><td>Ship the smallest change that<br />solves the whole problem</td><td>Ship the smallest change<br />that solves the whole problem</td></tr>
           </tbody>
         </table></DocsTable>
         <aside className="docs-note"><strong>Scope</strong><p>semantic-wrap is tuned for short display titles and headings, not automatic typesetting of long body copy.</p></aside>
