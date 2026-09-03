@@ -7,6 +7,7 @@ on:
 permissions:
   actions: write
   contents: write
+  id-token: write
   pull-requests: write
 
 concurrency:
@@ -14,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  version:
+  release:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,28 +25,42 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-      - run: bun install --frozen-lockfile
-      - name: Detect unreleased changesets
-        id: changesets
-        shell: bash
-        run: |
-          if find .changeset -maxdepth 1 -type f -name '*.md' ! -name README.md -print -quit | grep -q .; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: changesets/action/version@v2
-        id: version
-        if: steps.changesets.outputs.present == 'true'
+      - uses: actions/setup-node@v7
         with:
-          script: bun run version:packages
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Use an npm version that supports trusted publishing
+        run: npm install --global npm@11
+      - run: bun install --frozen-lockfile
+      - name: Create version pull request or publish packages
+        uses: changesets/action@v2
+        id: changesets
+        with:
+          version-script: bun run version:packages
+          publish-script: bun run release
           commit-message: "chore: version packages"
           pr-title: "chore: version packages"
+          create-github-releases: false
+          push-git-tags: true
       - name: Run CI for version pull request
-        if: steps.changesets.outputs.present == 'true' && steps.version.outputs.pr-number != ''
+        if: steps.changesets.outputs.pr-number != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION_PR: ${{ steps.version.outputs.pr-number }}
+          VERSION_PR: ${{ steps.changesets.outputs.pr-number }}
         run: |
           changeset_ref="$(gh pr view "$VERSION_PR" --json headRefName --jq .headRefName)"
           gh workflow run ci.yml --ref "$changeset_ref"
+      - name: Create unified GitHub Release
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.published-packages }}
+        run: |
+          version="$(node -e 'const packages = JSON.parse(process.env.PUBLISHED_PACKAGES); const versions = [...new Set(packages.map((item) => item.version))]; if (versions.length !== 1) process.exit(1); process.stdout.write(versions[0]);')"
+          gh release create "v${version}" --target "$GITHUB_SHA" --generate-notes --latest
+      - name: Verify npm, git, and GitHub release synchronization
+        if: steps.changesets.outputs.has-changesets != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_COMMIT: ${{ steps.changesets.outputs.published == 'true' && github.sha || '' }}
+        run: bun run release:verify --remote

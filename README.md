@@ -443,15 +443,16 @@ browser tests, and npm package validation.
 
 ## Release
 
-Publish the four packages in dependency order.
+Add a Changeset for every package-facing change.
 
 ```sh
-bun run check
-bun run publish:core
-bun run publish:en
-bun run publish:ko
-bun run publish:react
+bun changeset
 ```
+
+Merging to `main` creates or updates one version pull request. Merging that pull request
+publishes all four fixed-version packages through npm trusted publishing, creates the package
+git tags and a unified GitHub Release, then verifies that npm, git, and GitHub all report the
+same version. See [RELEASING.md](./RELEASING.md) for the one-time repository setup.
 
 ## License
 

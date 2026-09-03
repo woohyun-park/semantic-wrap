@@ -8,6 +8,7 @@ import {
 import { SemanticWrap } from "../../packages/react/src/index.js";
 import { useSemanticWrap } from "../../packages/react/src/index.js";
 import { createTextMeasurer } from "../../packages/react/src/dom-measure.js";
+import { koTitleModel } from "../../packages/ko/src/index.js";
 
 const model: PhraseModel = {
   boundaryMode: "spaces",
@@ -163,6 +164,41 @@ function FontMeasurementFixture() {
   );
 }
 
+function KoreanAppliedFixture() {
+  const text = "디자인 시스템을 도입하기 전에 반드시 확인해야 할 기준";
+  const { ref, selection } = useSemanticWrap({
+    text,
+    model: koTitleModel,
+    diagnostics: true,
+  });
+
+  return (
+    <section>
+      <p
+        ref={ref}
+        style={{
+          fontFamily: "system-ui",
+          fontSize: 16,
+          fontWeight: 600,
+          letterSpacing: "-0.035em",
+          lineHeight: 1.45,
+          margin: 0,
+          width: 320,
+          wordBreak: "keep-all",
+        }}
+      >
+        {text}
+      </p>
+      <output
+        id="ko-applied-status"
+        data-applied={selection ? String(selection.applied) : undefined}
+      >
+        {selection?.lines.join("\n")}
+      </output>
+    </section>
+  );
+}
+
 function App() {
   return (
     <>
@@ -191,6 +227,7 @@ function App() {
       <RefFixture />
       <CandidateFixture />
       <FontMeasurementFixture />
+      <KoreanAppliedFixture />
     </>
   );
 }
