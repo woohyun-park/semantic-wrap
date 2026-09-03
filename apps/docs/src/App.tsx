@@ -587,7 +587,7 @@ function ProcessStage({ activeStep, locale }: { activeStep: number; locale: Site
   const content = landingContent[locale];
   const processExampleText = content.process.example;
   const processSemanticReason = content.process.selectionReason;
-  const processMeasureWidth = locale === "ko" ? 220 : 345;
+  const processMeasureWidth = content.process.measureWidth;
   const { ref, selection, diagnostics } = useSemanticWrap({
     text: processExampleText,
     model: titleModels[locale],

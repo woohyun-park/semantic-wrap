@@ -27,12 +27,13 @@ breaks that feel natural when reading Korean text.
 
 ## Examples
 
-| Browser native wrapping | semantic-wrap |
+<!-- semantic-wrap-examples:start -->
+| CSS balance | semantic-wrap |
 | --- | --- |
-| Strong teams disagree openly while<br>keeping the shared goal visible | Strong teams disagree openly<br>while keeping the shared goal visible |
-| Before adding another<br>feature, understand the<br>behavior it should change | Before adding another feature,<br>understand the behavior<br>it should change |
-| The best design systems<br>create consistency without<br>blocking local needs | The best design systems<br>create consistency<br>without blocking local needs |
-| Security decisions work better when<br>they begin during product design | Security decisions work better<br>when they begin during product design |
+| Write clear headlines for<br>readers, not for reviewers | Write clear headlines<br>for readers, not for reviewers |
+| Earn customer trust before<br>asking for more data | Earn customer trust<br>before asking for more data |
+| Design documentation for<br>people who need to act | Design documentation<br>for people who need to act |
+<!-- semantic-wrap-examples:end -->
 
 ## Quick start
 
