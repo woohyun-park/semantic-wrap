@@ -57,7 +57,12 @@ try {
     `import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createLineBreakPlan, selectLineBreaks } from "@semantic-wrap/core";
+import {
+  createBudouxPredictor,
+  createLineBreakPlan,
+  definePhraseModel,
+  selectLineBreaks,
+} from "@semantic-wrap/core";
 import { enTitleModel } from "@semantic-wrap/en";
 import { koTitleModel } from "@semantic-wrap/ko";
 import { SemanticWrap } from "@semantic-wrap/react";
@@ -73,6 +78,23 @@ assert.equal(result.text, text);
 const plan = createLineBreakPlan({ text, model: koTitleModel });
 assert.equal(plan.select({ maxWidth: 10, measureText: (value) => value.length }).text, text);
 assert.equal(enTitleModel.levels.length, 3);
+const customModel = definePhraseModel({
+  boundaryMode: "spaces",
+  levels: [{
+    predictor: createBudouxPredictor({ UW3: { ":": 100 } }),
+    penalty: 0,
+  }],
+  fallbackPenalty: 1,
+});
+assert.equal(
+  selectLineBreaks({
+    text: "Review: before approval",
+    model: customModel,
+    maxWidth: 16,
+    measureText: (value) => value.length,
+  }).lines.length,
+  2,
+);
 const html = renderToStaticMarkup(
   createElement(SemanticWrap, { model: koTitleModel }, createElement("h1", null, text)),
 );
@@ -91,7 +113,7 @@ assert.equal(progressiveHtml, \`<h1>\${text}</h1>\`);
 
   writeFileSync(
     join(temporaryDirectory, "consumer.tsx"),
-    `import { balance, createLineBreakPlan, createLineBreakStrategy, selectLineBreaks, type PhraseModel } from "@semantic-wrap/core";
+    `import { balance, createBudouxPredictor, createLineBreakPlan, createLineBreakStrategy, definePhraseModel, selectLineBreaks, type BoundaryPredictor, type PhraseModel } from "@semantic-wrap/core";
 import { enTitleModel } from "@semantic-wrap/en";
 import { koTitleModel } from "@semantic-wrap/ko";
 import { SemanticWrap } from "@semantic-wrap/react";
@@ -111,6 +133,8 @@ plan.select({ maxWidth: 100, measureText: (value) => value.length });
 selection.selectedCandidates satisfies typeof selection.selectedCandidates;
 enTitleModel satisfies PhraseModel;
 koTitleModel satisfies PhraseModel;
+const predictor: BoundaryPredictor = createBudouxPredictor({ UW3: { ":": 100 } });
+definePhraseModel({ levels: [{ predictor, penalty: 0 }], fallbackPenalty: 1 }) satisfies PhraseModel;
 const title = <SemanticWrap model={koTitleModel}><h1>타입 검증</h1></SemanticWrap>;
 void title;
 `,

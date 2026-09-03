@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createBudouxPredictor,
   createLineBreakPlan,
   createLineBreakStrategy,
   lowestPenalty,
@@ -9,7 +10,7 @@ import {
 
 const model: PhraseModel = {
   boundaryMode: "spaces",
-  levels: [{ name: "semantic", model: {}, penalty: 0 }],
+  levels: [{ name: "semantic", predictor: createBudouxPredictor({}), penalty: 0 }],
   fallbackPenalty: 1,
 };
 

@@ -169,39 +169,45 @@ immutable snapshots, while calculation and selection run for each measurement.
 
 ### Custom phrase models
 
-`selectLineBreaks` accepts any model that implements `PhraseModel`. Replace `enTitleModel`
-with an independently trained model, or provide multiple models as `levels` so their
-predictions can be aggregated together.
+`selectLineBreaks` accepts any model that implements `PhraseModel`. Each level provides one
+synchronous `predictor` that returns semantic boundary offsets. Multiple levels can be
+aggregated together.
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
-| `levels` | yes | — | One or more models and their relative `penalty` values |
+| `levels` | yes | — | One or more predictors and their relative `penalty` values |
 | `fallbackPenalty` | yes | — | Cost of an allowed boundary not predicted by any level |
 | `boundaryMode` | no | `"spaces"` | `"spaces"` uses whitespace boundaries; `"characters"` uses Unicode grapheme boundaries and merges each adjacent whitespace run into one boundary |
 
-Each level's `penalty` is the cost of breaking at a boundary predicted by that model. Lower
+Each level's `penalty` is the cost of breaking at a boundary predicted by that level. Lower
 values are preferred during layout calculation. If multiple levels predict the same
 boundary, the default aggregation stage keeps the lowest penalty.
 
-This example creates a model that prefers the whitespace boundary after a colon:
+Use `definePhraseModel` to validate and freeze reusable configuration. This example adapts
+BudouX weights to the common predictor contract and prefers the whitespace boundary after a
+colon.
 
 ```ts
-import { selectLineBreaks, type PhraseModel } from "@semantic-wrap/core";
+import {
+  createBudouxPredictor,
+  definePhraseModel,
+  selectLineBreaks,
+} from "@semantic-wrap/core";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const colonTitleModel: PhraseModel = {
+const colonTitleModel = definePhraseModel({
   boundaryMode: "spaces",
   levels: [
     {
       name: "after-colon",
-      model: { UW3: { ":": 100 } },
+      predictor: createBudouxPredictor({ UW3: { ":": 100 } }),
       penalty: 0,
     },
   ],
   fallbackPenalty: 1,
-};
+});
 
 const result = selectLineBreaks({
   text: "Design review checklist: what to ask before approval",
@@ -216,6 +222,27 @@ console.log(result.lines);
 
 `UW3` is the BudouX feature for the character immediately before a boundary. The value
 `100` is a feature weight used by BudouX when classifying that boundary, not a probability.
+
+To use a tokenizer, rules engine, or another local model, implement `BoundaryPredictor`
+directly. `predict` must return strictly ascending UTF-16 source offsets inside the text.
+The configured `boundaryMode` still filters those predictions to allowed wrap positions.
+
+```ts
+const editorialModel = definePhraseModel({
+  boundaryMode: "spaces",
+  levels: [
+    {
+      name: "after-colon",
+      predictor: {
+        predict: (text) =>
+          [...text.matchAll(/:\s/gu)].map((match) => match.index + 1),
+      },
+      penalty: 0,
+    },
+  ],
+  fallbackPenalty: 1,
+});
+```
 
 ### Strategies
 

@@ -185,46 +185,48 @@ console.log(result.lines);
 #### 커스텀 모델 사용하기
 
 `selectLineBreaks`는 `PhraseModel` 인터페이스를 만족하는 모델이라면 어떤 모델이든
-사용할 수 있습니다. `koTitleModel` 대신 별도로 학습한 모델을 전달하거나, 여러 모델을
-`levels`로 구성해 각 모델의 예측을 함께 사용할 수도 있습니다.
+사용할 수 있습니다. 각 level에는 의미 경계 offset을 반환하는 동기식 `predictor`를
+넣습니다. 여러 level의 예측을 함께 집계할 수도 있습니다.
 
 `PhraseModel`은 다음 필드로 구성됩니다.
 
 | 필드 | 필수 | 기본값 | 설명 |
 | --- | --- | --- | --- |
-| `levels` | 예 | - | 모델과 `penalty`를 담은 하나 이상의 단계 |
+| `levels` | 예 | - | predictor와 `penalty`를 담은 하나 이상의 단계 |
 | `fallbackPenalty` | 예 | - | 어떤 단계도 찾지 않은 일반 경계의 비용 |
 | `boundaryMode` | 아니요 | `"spaces"` | `"spaces"`는 공백, `"characters"`는 Unicode grapheme 경계를 사용하며 인접한 공백 묶음은 하나의 경계로 합침 |
 
-각 level의 `penalty`는 해당 모델이 예측한 경계의 비용입니다. 값이 낮을수록 layout을
+각 level의 `penalty`는 해당 predictor가 예측한 경계의 비용입니다. 값이 낮을수록 layout을
 계산할 때 우선하며, 여러 level이 같은 경계를 예측하면 기본 `aggregate` 단계는 가장
 낮은 `penalty`를 사용합니다.
 
-다음 예시는 콜론(`:`) 뒤의 공백을 선호하는 독립적인 모델을 만듭니다. 실제
-서비스에서는 충분한 데이터로 학습하고 검증한 모델을 사용하세요.
+`definePhraseModel`을 사용하면 재사용할 모델 설정을 검증하고 동결할 수 있습니다.
+다음 예시는 BudouX 가중치를 공통 predictor 계약으로 변환해 콜론(`:`) 뒤의 공백을
+선호하게 만듭니다.
 
 사용 예시:
 
 ```ts
 import {
+  createBudouxPredictor,
+  definePhraseModel,
   selectLineBreaks,
-  type PhraseModel,
 } from "@semantic-wrap/core";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const colonTitleModel: PhraseModel = {
+const colonTitleModel = definePhraseModel({
   boundaryMode: "spaces",
   levels: [
     {
       name: "after-colon",
-      model: { UW3: { ":": 100 } },
+      predictor: createBudouxPredictor({ UW3: { ":": 100 } }),
       penalty: 0,
     },
   ],
   fallbackPenalty: 1,
-};
+});
 
 const text = "서비스 업데이트: 새로운 기능을 사용하는 방법";
 const input = {
@@ -243,8 +245,28 @@ console.log(customResult.lines);
 ```
 
 `UW3`는 줄바꿈 후보 바로 앞의 한 글자를 나타내는 BudouX feature입니다.
-`UW3: { ":": 100 }`은 콜론 바로 뒤를 경계로 예측하도록 점수를 부여합니다. `100`은
-확률이 아니라 BudouX가 경계를 판정할 때 사용하는 가중치입니다.
+예시의 `100`은 확률이 아니라 경계를 판정할 때 사용하는 가중치입니다.
+
+tokenizer, 규칙 엔진, 다른 로컬 모델을 사용하려면 `BoundaryPredictor`를 직접 구현합니다.
+`predict`는 문자열 내부의 UTF-16 source offset을 오름차순으로 반환해야 합니다.
+반환된 예측은 `boundaryMode`가 허용하는 실제 줄바꿈 위치로 다시 제한됩니다.
+
+```ts
+const editorialModel = definePhraseModel({
+  boundaryMode: "spaces",
+  levels: [
+    {
+      name: "after-colon",
+      predictor: {
+        predict: (text) =>
+          [...text.matchAll(/:\s/gu)].map((match) => match.index + 1),
+      },
+      penalty: 0,
+    },
+  ],
+  fallbackPenalty: 1,
+});
+```
 
 #### Strategy
 

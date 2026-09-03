@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  createBudouxPredictor,
   createLineBreakStrategy,
   type LineBreakCalculator,
   type PhraseModel,
@@ -12,9 +13,10 @@ import { koTitleModel } from "../../packages/ko/src/index.js";
 
 const model: PhraseModel = {
   boundaryMode: "spaces",
-  levels: [{ name: "test", model: {}, penalty: 0 }],
+  levels: [{ name: "test", predictor: createBudouxPredictor({}), penalty: 0 }],
   fallbackPenalty: 1,
 };
+const candidatePredictor = createBudouxPredictor({ UW3: { 나: 100 } });
 
 const responsiveCalculator: LineBreakCalculator = ({ maxWidth }) =>
   [{ breaks: maxWidth < 260 ? [2] : [] }];
@@ -50,7 +52,7 @@ function CandidateFixture() {
     levels: [
       {
         name: alternate ? "alternate" : "initial",
-        model: { UW3: { 나: 100 } },
+        predictor: candidatePredictor,
         penalty: alternate ? 0.5 : 0,
       },
     ],

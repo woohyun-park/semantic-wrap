@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   balance,
+  createBudouxPredictor,
   createLineBreakStrategy,
   greedy,
   selectLineBreaks,
@@ -13,8 +14,8 @@ const measureText = (text: string) => text.length;
 const model: PhraseModel = {
   boundaryMode: "spaces",
   levels: [
-    { model: {}, penalty: 0 },
-    { model: {}, penalty: 0.5 },
+    { predictor: createBudouxPredictor({}), penalty: 0 },
+    { predictor: createBudouxPredictor({}), penalty: 0.5 },
   ],
   fallbackPenalty: 1,
 };
@@ -172,7 +173,7 @@ describe("selectLineBreaks", () => {
   test("uses the phrase model fallback penalty for unmatched native breaks", () => {
     const highFallbackModel: PhraseModel = {
       boundaryMode: "spaces",
-      levels: [{ model: {}, penalty: 0 }],
+      levels: [{ predictor: createBudouxPredictor({}), penalty: 0 }],
       fallbackPenalty: 5,
     };
     const strategy = createLineBreakStrategy({
