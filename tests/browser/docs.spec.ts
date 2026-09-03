@@ -357,10 +357,14 @@ test("centers the main headline independently from its context", async ({ page }
   }
 });
 
-test("applies semantic wrapping to the first playground preset", async ({ page }) => {
+test("keeps every semantic playground preset wrapper-free", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
   await page.goto(landingUrl);
 
-  const preset = page.locator(".headline-presets button").first().locator("strong");
-  await expect(preset.locator("br")).not.toHaveCount(0);
+  const presets = page.locator(".headline-presets button");
+  await expect(presets).toHaveCount(3);
+  await expect(presets.locator(":scope > strong")).toHaveCount(3);
+  await expect(presets.first().locator(":scope > strong")).toContainText(
+    "디자인 시스템을 도입하기 전에",
+  );
 });
