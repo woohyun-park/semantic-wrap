@@ -111,7 +111,13 @@ function useInitialLandingHash(enabled: boolean) {
       const alignmentGap = id === "playground" && Number.isFinite(alignmentMargin)
         ? alignmentMargin
         : 0;
-      const delta = alignmentTarget.getBoundingClientRect().top - headerBottom - alignmentGap;
+      let targetTop = 0;
+      let offsetNode: HTMLElement | null = alignmentTarget;
+      while (offsetNode) {
+        targetTop += offsetNode.offsetTop;
+        offsetNode = offsetNode.offsetParent as HTMLElement | null;
+      }
+      const delta = targetTop - window.scrollY - headerBottom - alignmentGap;
       const previousScrollBehavior = root.style.scrollBehavior;
       root.style.scrollBehavior = "auto";
       window.scrollTo({

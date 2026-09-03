@@ -873,9 +873,11 @@ input[type="range"]:focus-visible {
 }
 
 .headline-measure {
+  --headline-measure-padding: 1.25rem;
+
   position: relative;
   max-width: 100%;
-  padding-inline: var(--space-lg);
+  padding-inline: var(--headline-measure-padding);
   transition: width 180ms var(--ease-out);
 }
 
@@ -904,8 +906,8 @@ input[type="range"]:focus-visible {
 .demo-headline-measure-source {
   position: absolute;
   top: 0;
-  right: var(--space-lg);
-  left: var(--space-lg);
+  right: var(--headline-measure-padding);
+  left: var(--headline-measure-padding);
   visibility: hidden;
   pointer-events: none;
 }
