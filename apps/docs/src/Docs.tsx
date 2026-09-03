@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -251,6 +252,7 @@ const navigationGroups = [
 const navigationLinks = navigationGroups.flatMap((group) => group.links);
 
 function useActiveDocsHref() {
+  const navigationTargetIdRef = useRef<string | null>(null);
   const [activeHref, setActiveHref] = useState(() => {
     const candidate = `${introductionPath}${window.location.hash}`;
     return navigationLinks.some((link) => link.href === candidate)
@@ -262,6 +264,23 @@ function useActiveDocsHref() {
     let animationFrame = 0;
     const syncActiveHref = () => {
       animationFrame = 0;
+      const navigationTargetId = navigationTargetIdRef.current;
+      if (navigationTargetId) {
+        const target = document.getElementById(navigationTargetId);
+        if (target) {
+          const scrollMarginTop = Number.parseFloat(
+            window.getComputedStyle(target).scrollMarginTop,
+          ) || 0;
+          const targetScrollY = Math.min(
+            Math.max(0, window.scrollY + target.getBoundingClientRect().top - scrollMarginTop),
+            Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+          );
+
+          if (Math.abs(window.scrollY - targetScrollY) > 2) return;
+        }
+        navigationTargetIdRef.current = null;
+      }
+
       const readingLine = Math.min(240, window.innerHeight * 0.28);
       const sections = Array.from(document.querySelectorAll<HTMLElement>(".docs-anchor[id]"));
       let nextHref = introductionPath;
@@ -284,23 +303,49 @@ function useActiveDocsHref() {
       if (animationFrame !== 0) return;
       animationFrame = window.requestAnimationFrame(syncActiveHref);
     };
+    const cancelNavigationTarget = () => {
+      if (!navigationTargetIdRef.current) return;
+      navigationTargetIdRef.current = null;
+      scheduleActiveHrefSync();
+    };
+    const cancelNavigationTargetOnKeydown = (event: KeyboardEvent) => {
+      if (["ArrowDown", "ArrowUp", "End", "Home", "PageDown", "PageUp", " "]
+        .includes(event.key)) {
+        cancelNavigationTarget();
+      }
+    };
+    const syncHistoryNavigation = () => {
+      navigationTargetIdRef.current = null;
+      scheduleActiveHrefSync();
+    };
 
     window.addEventListener("scroll", scheduleActiveHrefSync, { passive: true });
     window.addEventListener("resize", scheduleActiveHrefSync);
-    window.addEventListener("hashchange", scheduleActiveHrefSync);
-    window.addEventListener("popstate", scheduleActiveHrefSync);
+    window.addEventListener("wheel", cancelNavigationTarget, { passive: true });
+    window.addEventListener("touchstart", cancelNavigationTarget, { passive: true });
+    window.addEventListener("keydown", cancelNavigationTargetOnKeydown);
+    window.addEventListener("hashchange", syncHistoryNavigation);
+    window.addEventListener("popstate", syncHistoryNavigation);
     syncActiveHref();
 
     return () => {
       window.removeEventListener("scroll", scheduleActiveHrefSync);
       window.removeEventListener("resize", scheduleActiveHrefSync);
-      window.removeEventListener("hashchange", scheduleActiveHrefSync);
-      window.removeEventListener("popstate", scheduleActiveHrefSync);
+      window.removeEventListener("wheel", cancelNavigationTarget);
+      window.removeEventListener("touchstart", cancelNavigationTarget);
+      window.removeEventListener("keydown", cancelNavigationTargetOnKeydown);
+      window.removeEventListener("hashchange", syncHistoryNavigation);
+      window.removeEventListener("popstate", syncHistoryNavigation);
       if (animationFrame !== 0) window.cancelAnimationFrame(animationFrame);
     };
   }, []);
 
-  return { activeHref, setActiveHref };
+  const navigateToHref = useCallback((href: string, targetId: string) => {
+    navigationTargetIdRef.current = targetId;
+    setActiveHref(href);
+  }, []);
+
+  return { activeHref, navigateToHref };
 }
 
 function DocsNavigation({
@@ -312,7 +357,7 @@ function DocsNavigation({
   activeHref: string;
   centerActive?: boolean;
   label: string;
-  onNavigate: (href: string) => void;
+  onNavigate: (href: string, targetId: string) => void;
 }) {
   const navRef = useRef<HTMLElement>(null);
 
@@ -372,7 +417,7 @@ function DocsNavigation({
     if (!target) return;
 
     event.preventDefault();
-    onNavigate(href);
+    onNavigate(href, targetId);
     if (`${window.location.pathname}${window.location.hash}` !== `${url.pathname}${url.hash}`) {
       window.history.pushState(null, "", `${url.pathname}${url.hash}`);
     }
@@ -771,7 +816,7 @@ function IntroductionArticle() {
 }
 
 export function DocsApp() {
-  const { activeHref, setActiveHref } = useActiveDocsHref();
+  const { activeHref, navigateToHref } = useActiveDocsHref();
   const activeLabel = navigationLinks.find((link) => link.href === activeHref)?.label ?? "semantic-wrap 소개";
 
   useEffect(() => {
@@ -785,7 +830,7 @@ export function DocsApp() {
       <div className="docs-mobile-index docs-width">
         <details>
           <summary><span>문서 탐색</span><strong>{activeLabel}</strong></summary>
-          <DocsNavigation activeHref={activeHref} label="모바일 문서 메뉴" onNavigate={setActiveHref} />
+          <DocsNavigation activeHref={activeHref} label="모바일 문서 메뉴" onNavigate={navigateToHref} />
         </details>
       </div>
       <main className="docs-grid docs-width" id="main-content">
@@ -794,7 +839,7 @@ export function DocsApp() {
             activeHref={activeHref}
             centerActive
             label="문서 메뉴"
-            onNavigate={setActiveHref}
+            onNavigate={navigateToHref}
           />
         </aside>
         <IntroductionArticle />

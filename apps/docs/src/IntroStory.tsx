@@ -31,7 +31,7 @@ import {
 import { copyText } from "./site-config";
 
 const installCommand =
-  "npm install @semantic-wrap/core @semantic-wrap/react @semantic-wrap/ko react react-dom";
+  "npm i @semantic-wrap/react @semantic-wrap/ko";
 
 type MessagePhase = "blank" | "source" | "complete";
 type SceneContent =
@@ -388,16 +388,14 @@ function HeroScene({ direction, staticScene }: SceneMotionProps) {
         <InstallCommand />
         <StartAction />
       </div>
-      <p className="hero-scroll-cue">
-        <span>스크롤하여 줄바꿈 비교</span>
+      <div className="hero-scroll-cue" aria-hidden="true">
         <motion.span
-          animate={staticScene ? undefined : { opacity: [0.35, 1, 0.35], y: [0, 6, 0] }}
+          animate={staticScene ? undefined : { opacity: [0.58, 1, 0.58], y: [0, 6, 0] }}
           transition={{ duration: 1.8, ease: easeOutQuint, repeat: Infinity }}
-          aria-hidden="true"
         >
           ↓
         </motion.span>
-      </p>
+      </div>
     </SceneFrame>
   );
 }

@@ -18,6 +18,65 @@ test("moves the document without letting sidebar centering override the anchor",
   ).toBeLessThan(240);
 });
 
+test("keeps the clicked document section selected during smooth scrolling", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(docsUrl);
+
+  const targetHref = `${docsUrl}#diagnostics`;
+  const targetLink = page.locator('.docs-sidebar a[href$="#diagnostics"]');
+  await targetLink.click();
+  await expect(targetLink).toHaveAttribute("aria-current", "location");
+
+  const selectedHrefs = await page.evaluate(async (href) => {
+    const samples: Array<string | null> = [];
+    const target = document.getElementById("diagnostics")!;
+
+    for (let frame = 0; frame < 120; frame += 1) {
+      samples.push(document.querySelector<HTMLAnchorElement>(
+        '.docs-sidebar a[aria-current="location"]',
+      )?.href ?? null);
+
+      const scrollMarginTop = Number.parseFloat(
+        window.getComputedStyle(target).scrollMarginTop,
+      ) || 0;
+      const targetScrollY = Math.min(
+        window.scrollY + target.getBoundingClientRect().top - scrollMarginTop,
+        document.documentElement.scrollHeight - window.innerHeight,
+      );
+      if (Math.abs(window.scrollY - targetScrollY) <= 2) break;
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    }
+
+    return { href, samples };
+  }, targetHref);
+
+  expect(new Set(selectedHrefs.samples)).toEqual(new Set([selectedHrefs.href]));
+  await expect.poll(async () =>
+    page.locator("#diagnostics").evaluate((element) => element.getBoundingClientRect().top),
+  ).toBeLessThan(240);
+  await expect(targetLink).toHaveAttribute("aria-current", "location");
+});
+
+test("returns document selection to the scroll spy when navigation is interrupted", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(docsUrl);
+
+  const targetLink = page.locator('.docs-sidebar a[href$="#diagnostics"]');
+  await targetLink.click();
+  await expect(targetLink).toHaveAttribute("aria-current", "location");
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new WheelEvent("wheel", { deltaY: -1 }));
+    window.scrollTo({ behavior: "instant", top: 0 });
+  });
+
+  const overviewLink = page.locator('.docs-sidebar a[href="/ko/docs/introduction"]');
+  await expect(overviewLink).toHaveAttribute("aria-current", "location");
+  await expect(targetLink).not.toHaveAttribute("aria-current", "location");
+});
+
 test("keeps maintainer release instructions out of the public docs", async ({ page }) => {
   await page.goto(docsUrl);
 

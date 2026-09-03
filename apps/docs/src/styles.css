@@ -298,21 +298,14 @@ input[type="range"]:focus-visible {
   position: absolute;
   bottom: clamp(1.5rem, 4vh, 3rem);
   left: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-xs);
-  margin: 0;
-  color: var(--ink-500);
-  font-family: var(--font-code);
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
+  color: var(--blue-bright);
+  font-size: clamp(1.75rem, 2.5vw, 2.25rem);
+  line-height: 1;
   transform: translateX(-50%);
-  white-space: nowrap;
 }
 
-.hero-scroll-cue span:last-child {
-  color: var(--blue-bright);
+.hero-scroll-cue span {
+  display: block;
 }
 
 .hero-brand-stage::before {
@@ -444,10 +437,12 @@ input[type="range"]:focus-visible {
 }
 
 .quick-install {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: inline-flex;
   align-items: center;
-  width: min(100%, 42rem);
+  justify-content: center;
+  gap: var(--space-xs);
+  width: min(100%, 30rem);
+  min-width: 0;
   min-height: 2.75rem;
   padding: 0;
   overflow: hidden;
@@ -459,17 +454,14 @@ input[type="range"]:focus-visible {
   transition: color 180ms var(--ease-out);
 }
 
-.hero-brand-stage .quick-install {
-  width: min(100%, clamp(16.75rem, 38.625vw, 29.75rem));
-}
-
 .quick-install code {
+  flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
   padding: var(--space-xs) 0;
   color: inherit;
-  font-size: 1rem;
+  font-size: 0.875rem;
   white-space: nowrap;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -484,18 +476,15 @@ input[type="range"]:focus-visible {
 }
 
 .quick-install-icon {
+  flex: 0 0 1.25rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 1.25rem;
   height: 1.25rem;
-  margin-left: var(--space-sm);
   color: currentColor;
-  opacity: 0;
-  transform: translateX(-0.25rem);
-  transition:
-    opacity 180ms var(--ease-out),
-    transform 240ms var(--ease-out);
+  opacity: 0.48;
+  transition: opacity 180ms var(--ease-out);
 }
 
 .quick-install-icon svg {
@@ -514,7 +503,6 @@ input[type="range"]:focus-visible {
 .quick-install.is-copied .quick-install-icon,
 .quick-install.is-failed .quick-install-icon {
   opacity: 1;
-  transform: translateX(0);
 }
 
 .quick-install.is-copied {
@@ -561,6 +549,8 @@ input[type="range"]:focus-visible {
 .intro-story-stack {
   position: relative;
   display: grid;
+  width: 100%;
+  min-width: 0;
   min-height: inherit;
   isolation: isolate;
   contain: paint;
@@ -568,6 +558,7 @@ input[type="range"]:focus-visible {
 
 .intro-story-stack > .intro-story-scene {
   grid-area: 1 / 1;
+  min-width: 0;
 }
 
 .intro-message-stage {
@@ -1535,6 +1526,12 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
+@media (max-width: 30rem) {
+  .quick-install code {
+    font-size: 0.8125rem;
+  }
+}
+
 @media (min-width: 48rem) {
   html {
     scroll-padding-top: 5rem;
@@ -1721,7 +1718,6 @@ input[type="range"]::-moz-range-thumb {
 
   .quick-install:hover .quick-install-icon {
     opacity: 1;
-    transform: translateX(0);
   }
 
   .headline-presets button:hover {
@@ -1759,7 +1755,6 @@ input[type="range"]::-moz-range-thumb {
 
   .quick-install-icon {
     opacity: 0.64;
-    transform: none;
   }
 }
 
