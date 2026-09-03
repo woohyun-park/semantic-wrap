@@ -1,3 +1,4 @@
+import { useSemanticWrap } from "@semantic-wrap/react";
 import {
   Fragment,
   useCallback,
@@ -5,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
@@ -27,6 +29,7 @@ import {
   type LineBreakExample,
 } from "./landing-content";
 import { SceneFrame, ShimmerText } from "./motion";
+import { titleModels } from "./site-models";
 import {
   ArrowIcon,
   BrandLockup,
@@ -295,6 +298,29 @@ function InstallCommand({ content }: { content: LandingContent }) {
   );
 }
 
+type HeadlineToken = {
+  end: number;
+  start: number;
+  text: string;
+};
+
+function headlineTokens(text: string): readonly HeadlineToken[] {
+  return [...text.matchAll(/\S+/gu)].map((match) => ({
+    end: (match.index ?? 0) + match[0].length,
+    start: match.index ?? 0,
+    text: match[0],
+  }));
+}
+
+function lineIndexAt(offset: number, breaks: readonly number[]): number {
+  let lineIndex = 0;
+  for (const breakOffset of breaks) {
+    if (offset < breakOffset) break;
+    lineIndex += 1;
+  }
+  return lineIndex;
+}
+
 function LineBreakHeadline({
   example,
   onLayoutComplete,
@@ -314,68 +340,109 @@ function LineBreakHeadline({
   semantic: boolean;
   staticScene?: boolean;
 }) {
-  const breakAfter = semantic ? example.semanticBreakAfter : example.nativeBreakAfter;
+  const { ref, selection, diagnostics } = useSemanticWrap({
+    text: example.text,
+    model: titleModels[locale],
+    diagnostics: true,
+  });
+  const currentSelection = selection?.text === example.text ? selection : null;
+  const currentDiagnostics = currentSelection ? diagnostics : null;
+  const nativeBreaks = currentDiagnostics?.nativeLayout?.breaks ?? [];
+  const semanticBreaks = currentSelection?.breaks ?? nativeBreaks;
+  const displayedBreaks = semantic ? semanticBreaks : nativeBreaks;
+  const displayedBreakOffsets = new Set(displayedBreaks);
+  const tokens = useMemo(() => headlineTokens(example.text), [example.text]);
+  const changedTokenIndexes = new Set<number>();
+  if (currentSelection?.applied) {
+    for (const [index, token] of tokens.entries()) {
+      if (lineIndexAt(token.start, nativeBreaks) !== lineIndexAt(token.start, semanticBreaks)) {
+        changedTokenIndexes.add(index);
+      }
+    }
+  }
+  const lastChangedIndex = Math.max(-1, ...changedTokenIndexes);
+  const measureStyle = {
+    "--line-break-measure": `${example.introMeasureEm}em`,
+  } as CSSProperties;
 
   return (
-    <motion.p
-      className="line-break-headline"
-      layout={staticScene ? false : true}
-      aria-label={`${semantic ? content.intro.semanticLabel : content.intro.nativeLabel}: ${example.text}`}
-      lang={locale}
-    >
-      {example.pieces.map((piece, index) => {
-        const followsBreak = index === breakAfter + 1;
-        const shimmerTarget = semantic && index === example.focusIndex;
-        const pieceClassName = [
-          "line-break-piece",
-          index === example.focusIndex ? "is-focus" : "",
-          index > 0 && !followsBreak ? "has-gap" : "",
-        ].filter(Boolean).join(" ");
+    <Fragment>
+      <p
+        className="line-break-headline-measure-source"
+        ref={ref}
+        aria-hidden="true"
+        lang={locale}
+        style={measureStyle}
+      >
+        {example.text}
+      </p>
+      <motion.p
+        className="line-break-headline"
+        layout={staticScene ? false : true}
+        aria-label={`${semantic ? content.intro.semanticLabel : content.intro.nativeLabel}: ${example.text}`}
+        data-baseline="css-balance"
+        data-breaks={displayedBreaks.join(",")}
+        data-selection-applied={currentSelection?.applied ? "true" : "false"}
+        lang={locale}
+        style={measureStyle}
+      >
+        {tokens.map((token, index) => {
+          const previousToken = tokens[index - 1];
+          const followsBreak = previousToken
+            ? displayedBreakOffsets.has(previousToken.end)
+            : false;
+          const hasBreak = displayedBreakOffsets.has(token.end);
+          const changed = changedTokenIndexes.has(index);
+          const shimmerTarget = semantic && changed;
+          const pieceClassName = [
+            "line-break-piece",
+            changed ? "is-focus" : "",
+            index > 0 && !followsBreak ? "has-gap" : "",
+          ].filter(Boolean).join(" ");
 
-        return (
-          <Fragment key={`${example.id}-${piece}`}>
-            <motion.span
-              className={pieceClassName}
-              data-flip-piece={`${example.id}-${index}`}
-              data-motion-layout={staticScene ? undefined : "position"}
-              data-piece-index={index}
-              layout={staticScene ? false : "position"}
-              layoutDependency={semantic}
-              initial={staticScene ? false : { opacity: 0, y: 19 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                ...headlineLayoutTransition,
-                delay: index * 0.055,
-                duration: 0.62,
-                ease: easeOutExpo,
-              }}
-              onLayoutAnimationComplete={
-                index === example.focusIndex && sceneIndex !== undefined
-                  ? () => onLayoutComplete?.(sceneIndex)
-                  : undefined
-              }
-              aria-hidden="true"
-            >
-              {shimmerTarget ? <ShimmerText run={run}>{piece}</ShimmerText> : piece}
-            </motion.span>
-            {index === breakAfter ? (
-              <Fragment>
-                <motion.span
-                  className="gradient-text-safe line-break-marker"
-                  initial={staticScene ? false : { opacity: 0, scale: 0.8, y: "0.08em" }}
-                  animate={{ opacity: 1, scale: 1, y: "0.08em" }}
-                  transition={{ duration: 0.18, ease: easeOutExpo }}
-                  aria-hidden="true"
-                >
-                  ↵
-                </motion.span>
-                <span className="line-break-force" aria-hidden="true" />
-              </Fragment>
-            ) : null}
-          </Fragment>
-        );
-      })}
-    </motion.p>
+          return (
+            <Fragment key={`${example.id}-${token.start}`}>
+              <motion.span
+                className={pieceClassName}
+                data-flip-piece={`${example.id}-${index}`}
+                data-motion-layout={staticScene ? undefined : "position"}
+                data-piece-index={index}
+                layout={staticScene ? false : "position"}
+                layoutDependency={`${semantic}:${displayedBreaks.join(",")}`}
+                initial={staticScene ? false : { opacity: 0, y: 19 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  ...headlineLayoutTransition,
+                  delay: index * 0.025,
+                  duration: 0.62,
+                  ease: easeOutExpo,
+                }}
+                onLayoutAnimationComplete={
+                  index === lastChangedIndex && sceneIndex !== undefined
+                    ? () => onLayoutComplete?.(sceneIndex)
+                    : undefined
+                }
+                aria-hidden="true"
+              >
+                {shimmerTarget ? <ShimmerText run={run}>{token.text}</ShimmerText> : token.text}
+                {hasBreak ? (
+                  <motion.span
+                    className="gradient-text-safe line-break-marker"
+                    initial={staticScene ? false : { opacity: 0, scale: 0.8, y: "0.08em" }}
+                    animate={{ opacity: 1, scale: 1, y: "0.08em" }}
+                    transition={{ duration: 0.18, ease: easeOutExpo }}
+                    aria-hidden="true"
+                  >
+                    ↵
+                  </motion.span>
+                ) : null}
+              </motion.span>
+              {hasBreak ? <span className="line-break-force" aria-hidden="true" /> : null}
+            </Fragment>
+          );
+        })}
+      </motion.p>
+    </Fragment>
   );
 }
 

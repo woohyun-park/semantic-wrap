@@ -237,14 +237,14 @@ const canvasContext = canvas.getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
 const result = selectLineBreaks({
-  text: "Write headlines for readers not for internal approval",
+  text: "Write clear headlines for readers, not for reviewers",
   model: enTitleModel,
   maxWidth: 420,
   measureText: (text) => canvasContext.measureText(text).width,
 });
 
 console.log(result.lines);
-// ["Write headlines for readers", "not for internal approval"]`;
+// ["Write clear headlines", "for readers, not for reviewers"]`;
 
 const englishModelCode = `import {
   selectLineBreaks,
@@ -997,15 +997,15 @@ function EnglishIntroductionArticle() {
       </header>
 
       <DocsSection id="examples" index="01" locale="en" title="Examples">
-        <p>Compare native wrapping based on width alone with results that preserve model-predicted phrase boundaries.</p>
+        <p>Compare CSS balance, which considers width alone, with results that preserve model-predicted phrase boundaries.</p>
         <DocsTable><table>
-          <caption>Browser-native and semantic-wrap results</caption>
-          <thead><tr><th>Browser native wrapping</th><th>semantic-wrap</th></tr></thead>
+          <caption>CSS balance and semantic-wrap results</caption>
+          <thead><tr><th>CSS balance</th><th>semantic-wrap</th></tr></thead>
           <tbody>
-            <tr><td>Solve the right problem before<br />building a solution</td><td>Solve the right problem<br />before building a solution</td></tr>
-            <tr><td>Before adding another feature,<br />understand the behavior it should change</td><td>Before adding another feature,<br />understand the behavior<br />it should change</td></tr>
+            <tr><td>Write clear headlines for<br />readers, not for reviewers</td><td>Write clear headlines<br />for readers, not for reviewers</td></tr>
+            <tr><td>Earn customer trust before<br />asking for more data</td><td>Earn customer trust<br />before asking for more data</td></tr>
             <tr><td>The best design systems create consistency<br />without blocking local needs</td><td>The best design systems<br />create consistency without blocking local needs</td></tr>
-            <tr><td>Ship the smallest change that<br />solves the whole problem</td><td>Ship the smallest change<br />that solves the whole problem</td></tr>
+            <tr><td>Design documentation for<br />people who need to act</td><td>Design documentation<br />for people who need to act</td></tr>
           </tbody>
         </table></DocsTable>
         <aside className="docs-note"><strong>Scope</strong><p>semantic-wrap is tuned for short display titles and headings, not automatic typesetting of long body copy.</p></aside>

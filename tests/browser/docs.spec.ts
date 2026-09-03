@@ -142,8 +142,9 @@ test("shows an actual semantic before and after in the process", async ({ page }
       return Math.round(paragraph.getBoundingClientRect().height / lineHeight);
     }),
   );
-  expect(visualLineCounts).toHaveLength(4);
+  expect(visualLineCounts).toHaveLength(3);
   expect(visualLineCounts.every((lineCount) => lineCount === 2)).toBe(true);
+  expect(new Set(await page.locator(".process-layout-option p").allInnerTexts()).size).toBe(3);
 
   await page.locator('.process-list [data-process-step="2"] button').click();
 
@@ -166,6 +167,8 @@ test("shows an actual semantic before and after in the process", async ({ page }
 
 test("keeps the English process candidates and result on the same two-line premise", async ({ page }) => {
   await page.goto(englishLandingUrl);
+  await expect(page.locator(".demo-headline-measure-source")).toHaveCSS("text-wrap", "balance");
+  await expect(page.locator(".process-measure-source")).toHaveCSS("text-wrap", "balance");
   await page.locator('.process-list [data-process-step="1"] button').click();
 
   const visualLineCounts = await page.locator(".process-layout-option p").evaluateAll(
@@ -174,19 +177,101 @@ test("keeps the English process candidates and result on the same two-line premi
       return Math.round(paragraph.getBoundingClientRect().height / lineHeight);
     }),
   );
-  expect(visualLineCounts).toHaveLength(4);
+  expect(visualLineCounts).toHaveLength(3);
   expect(visualLineCounts.every((lineCount) => lineCount === 2)).toBe(true);
+  expect(new Set(await page.locator(".process-layout-option p").allInnerTexts()).size).toBe(3);
 
   await page.locator('.process-list [data-process-step="2"] button').click();
 
   const comparison = page.locator(".process-selection-comparison");
   await expect(comparison).toHaveAttribute("data-result", "applied");
   expect(await comparison.locator(".is-native p").innerText()).toBe(
-    "Write clear headlines for readers, not for\nreviewers",
+    "Write clear headlines for\nreaders, not for reviewers",
   );
   expect(await comparison.locator(".is-semantic p").innerText()).toBe(
-    "Write clear headlines for readers,\nnot for reviewers",
+    "Write clear headlines\nfor readers, not for reviewers",
   );
+});
+
+test("uses an actual CSS balance selection for every landing example", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const width of [320, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+
+    for (const url of [englishLandingUrl, landingUrl]) {
+      await page.goto(url);
+
+      const measureSources = page.locator(".line-break-headline-measure-source");
+      await expect(measureSources).toHaveCount(6);
+      expect(await measureSources.evaluateAll((elements) => elements.every(
+        (element) => window.getComputedStyle(element).textWrap === "balance",
+      ))).toBe(true);
+      await expect(page.locator(".process-measure-source")).toHaveCSS(
+        "text-wrap",
+        "balance",
+      );
+      await expect(page.locator(".demo-headline-measure-source")).toHaveCSS(
+        "text-wrap",
+        "balance",
+      );
+
+      const nativeHeadlines = page.locator(
+        '.line-break-composition[data-semantic="false"] .line-break-headline',
+      );
+      const semanticHeadlines = page.locator(
+        '.line-break-composition[data-semantic="true"] .line-break-headline',
+      );
+      await expect(nativeHeadlines).toHaveCount(3);
+      await expect(semanticHeadlines).toHaveCount(3);
+
+      await expect.poll(() => semanticHeadlines.evaluateAll((elements) => elements.map(
+        (element) => element.getAttribute("data-selection-applied"),
+      ))).toEqual(["true", "true", "true"]);
+
+      for (let index = 0; index < 3; index += 1) {
+        const nativeBreaks = await nativeHeadlines.nth(index).getAttribute("data-breaks");
+        const semanticBreaks = await semanticHeadlines.nth(index).getAttribute("data-breaks");
+        expect(nativeBreaks).not.toBe(semanticBreaks);
+        expect(nativeBreaks?.split(",").length).toBe(semanticBreaks?.split(",").length);
+      }
+
+      const lineCountMatchesBreaks = await page.locator(".line-break-headline").evaluateAll(
+        (headlines) => headlines.every((headline) => {
+          const tokenTops = new Set(
+            [...headline.querySelectorAll(".line-break-piece")].map(
+              (piece) => Math.round(piece.getBoundingClientRect().top),
+            ),
+          );
+          const breaks = headline.getAttribute("data-breaks");
+          const expectedLines = breaks ? breaks.split(",").length + 1 : 1;
+          return tokenTops.size === expectedLines;
+        }),
+      );
+      expect(lineCountMatchesBreaks).toBe(true);
+
+      await page.locator('.process-list [data-process-step="2"] button').click();
+      await expect(page.locator(".process-selection-comparison")).toHaveAttribute(
+        "data-result",
+        "applied",
+      );
+
+      const presets = page.locator(".headline-presets button");
+      for (let index = 0; index < 3; index += 1) {
+        await presets.nth(index).click();
+        await expect(page.locator(".measure-instrument")).toHaveAttribute(
+          "data-result",
+          "applied",
+        );
+        const browserText = await page.locator(
+          ".measure-pane.is-browser .demo-headline:not(.demo-headline-measure-source)",
+        ).innerText();
+        await expect(page.locator(".measure-pane.is-semantic .demo-headline")).not.toHaveText(
+          browserText,
+        );
+      }
+    }
+  }
 });
 
 test("leaves room for the English shimmer overlay at display size", async ({ page }) => {
@@ -510,4 +595,57 @@ test("keeps every semantic playground preset wrapper-free", async ({ page }) => 
   await expect(presets.first().locator(":scope > strong")).toContainText(
     "디자인 시스템을 도입하기 전에",
   );
+});
+
+test("shows a meaningful English change for every playground preset", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(englishLandingUrl);
+
+  await expect(page.locator("#browser-measure-label")).toContainText("CSS balance");
+  await expect(page.locator(".demo-headline-measure-source")).toHaveCSS("text-wrap", "balance");
+  await page.locator("#measure-width").fill("414");
+
+  const expected = [
+    ["Write clear headlines for\nreaders, not for reviewers", "Write clear headlines\nfor readers, not for reviewers"],
+    ["Earn customer trust before\nasking for more data", "Earn customer trust\nbefore asking for more data"],
+    ["Design documentation for\npeople who need to act", "Design documentation\nfor people who need to act"],
+  ] as const;
+
+  const presets = page.locator(".headline-presets button");
+  for (const [index, [browserText, semanticText]] of expected.entries()) {
+    await presets.nth(index).click();
+    const browserHeadline = page.locator(".measure-pane.is-browser .demo-headline:not(.demo-headline-measure-source)");
+    const semanticHeadline = page.locator(".measure-pane.is-semantic .demo-headline");
+    await expect.poll(() => browserHeadline.innerText()).toBe(browserText);
+    await expect.poll(() => semanticHeadline.innerText()).toBe(semanticText);
+    await expect(semanticHeadline.locator(".semantic-diff-changed")).not.toHaveCount(0);
+  }
+});
+
+test("keeps both playground results close enough to compare on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(englishLandingUrl);
+
+  const panes = page.locator(".measure-pane");
+  await expect(panes).toHaveCount(2);
+  const comparisonHeight = await page.locator(".measure-comparison").evaluate(
+    (element) => element.getBoundingClientRect().height,
+  );
+  const paneHeights = await panes.evaluateAll(
+    (elements) => elements.map((element) => element.getBoundingClientRect().height),
+  );
+
+  expect(comparisonHeight).toBeLessThanOrEqual(500);
+  expect(paneHeights.every((height) => height <= 250)).toBe(true);
+});
+
+test("keeps stacked playground results compact on tablet widths", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto(englishLandingUrl);
+
+  const paneHeights = await page.locator(".measure-pane").evaluateAll(
+    (elements) => elements.map((element) => element.getBoundingClientRect().height),
+  );
+  expect(paneHeights).toHaveLength(2);
+  expect(paneHeights.every((height) => height <= 300)).toBe(true);
 });

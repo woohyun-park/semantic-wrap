@@ -37,24 +37,27 @@ import {
   type SiteLocale,
 } from "./site-config";
 
+function availableMeasureWidth(paneBody: HTMLElement): number {
+  const styles = window.getComputedStyle(paneBody);
+  const inlinePadding =
+    Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
+  return Math.max(
+    240,
+    Math.min(640, Math.floor((paneBody.clientWidth - inlinePadding) / 2) * 2),
+  );
+}
+
 function useMeasureWidth(paneBodyRef: RefObject<HTMLDivElement | null>) {
   const previousMaxWidth = useRef(640);
   const [maxWidth, setMaxWidth] = useState(640);
-  const [width, setWidth] = useState(480);
+  const [width, setWidth] = useState(414);
 
   useEffect(() => {
     const paneBody = paneBodyRef.current;
     if (!paneBody) return undefined;
 
     const syncAvailableWidth = () => {
-      const styles = window.getComputedStyle(paneBody);
-      const inlinePadding =
-        Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
-      const availableWidth = paneBody.clientWidth - inlinePadding;
-      const nextMaxWidth = Math.max(
-        240,
-        Math.min(640, Math.floor(availableWidth / 2) * 2),
-      );
+      const nextMaxWidth = availableMeasureWidth(paneBody);
       const previousMax = previousMaxWidth.current;
 
       setMaxWidth(nextMaxWidth);
@@ -142,14 +145,15 @@ function renderSemanticDiff(
 
 function Playground({ locale }: { locale: SiteLocale }) {
   const content = landingContent[locale];
-  const { demoHeadlines, playground } = content;
+  const { examples, playground } = content;
   const model = titleModels[locale];
   const paneBodyRef = useRef<HTMLDivElement>(null);
   const dragPointerRef = useRef<number | null>(null);
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const [measureDragging, setMeasureDragging] = useState(false);
   const { maxWidth, setWidth, width } = useMeasureWidth(paneBodyRef);
-  const text = demoHeadlines[headlineIndex] ?? demoHeadlines[0] ?? "";
+  const currentExample = examples[headlineIndex] ?? examples[0];
+  const text = currentExample.text;
   const { ref, selection, diagnostics } = useSemanticWrap({
     text,
     model,
@@ -206,19 +210,31 @@ function Playground({ locale }: { locale: SiteLocale }) {
           <h2 id="playground-title">Playground</h2>
         </motion.div>
 
-        <div className={`measure-instrument${measureDragging ? " is-dragging" : ""}`}>
+        <div
+          className={`measure-instrument${measureDragging ? " is-dragging" : ""}`}
+          data-result={currentSelection?.applied ? "applied" : "native"}
+        >
           <div className="headline-presets" role="group" aria-label={playground.presetLabel}>
-            {demoHeadlines.map((headline, index) => (
+            {examples.map((example, index) => (
               <button
                 type="button"
-                key={headline}
+                key={example.id}
                 className={index === headlineIndex ? "is-current" : undefined}
                 aria-pressed={index === headlineIndex}
-                onClick={() => setHeadlineIndex(index)}
+                onClick={() => {
+                  const availableWidth = paneBodyRef.current
+                    ? availableMeasureWidth(paneBodyRef.current)
+                    : maxWidth;
+                  setHeadlineIndex(index);
+                  setWidth(
+                    example.playgroundMeasures.find((measure) => measure <= availableWidth)
+                      ?? Math.min(240, availableWidth),
+                  );
+                }}
               >
                 <span className="gradient-text-safe">{playground.example} 0{index + 1}</span>
                 <SemanticWrap model={model}>
-                  <strong>{headline}</strong>
+                  <strong>{example.text}</strong>
                 </SemanticWrap>
               </button>
             ))}
@@ -325,6 +341,7 @@ function getProcessLayoutEntries(
 ): readonly ProcessLayoutEntry[] {
   if (!diagnostics) return [];
 
+  const nativeBreaks = diagnostics.nativeLayout?.breaks.join(":");
   const nativeEntry = diagnostics.nativeLayout
     ? [{
         id: "N",
@@ -332,11 +349,15 @@ function getProcessLayoutEntries(
         source: "browser" as const,
       }]
     : [];
-  const calculatedEntries = diagnostics.calculatedLayouts.map((layout, index) => ({
-    id: String.fromCharCode(65 + index),
-    layout,
-    source: "calculated" as const,
-  }));
+  const calculatedEntries: ProcessLayoutEntry[] = [];
+  for (const layout of diagnostics.calculatedLayouts) {
+    if (layout.breaks.join(":") === nativeBreaks) continue;
+    calculatedEntries.push({
+      id: String.fromCharCode(65 + calculatedEntries.length),
+      layout,
+      source: "calculated",
+    });
+  }
 
   return [...nativeEntry, ...calculatedEntries];
 }
