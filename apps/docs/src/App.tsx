@@ -37,24 +37,27 @@ import {
   type SiteLocale,
 } from "./site-config";
 
+function availableMeasureWidth(paneBody: HTMLElement): number {
+  const styles = window.getComputedStyle(paneBody);
+  const inlinePadding =
+    Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
+  return Math.max(
+    240,
+    Math.min(640, Math.floor((paneBody.clientWidth - inlinePadding) / 2) * 2),
+  );
+}
+
 function useMeasureWidth(paneBodyRef: RefObject<HTMLDivElement | null>) {
   const previousMaxWidth = useRef(640);
   const [maxWidth, setMaxWidth] = useState(640);
-  const [width, setWidth] = useState(480);
+  const [width, setWidth] = useState(414);
 
   useEffect(() => {
     const paneBody = paneBodyRef.current;
     if (!paneBody) return undefined;
 
     const syncAvailableWidth = () => {
-      const styles = window.getComputedStyle(paneBody);
-      const inlinePadding =
-        Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight);
-      const availableWidth = paneBody.clientWidth - inlinePadding;
-      const nextMaxWidth = Math.max(
-        240,
-        Math.min(640, Math.floor(availableWidth / 2) * 2),
-      );
+      const nextMaxWidth = availableMeasureWidth(paneBody);
       const previousMax = previousMaxWidth.current;
 
       setMaxWidth(nextMaxWidth);
@@ -74,6 +77,78 @@ function useMeasureWidth(paneBodyRef: RefObject<HTMLDivElement | null>) {
   }, [paneBodyRef]);
 
   return { maxWidth, setWidth, width };
+}
+
+function useInitialLandingHash(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled || !window.location.hash) return undefined;
+
+    let frame = 0;
+    let cancelled = false;
+    let attempts = 0;
+    let stableFrames = 0;
+    const root = document.documentElement;
+
+    const cancelAlignment = () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+
+    const alignHashTarget = () => {
+      if (cancelled) return;
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      const target = document.getElementById(id);
+      if (!target) return;
+
+      const header = document.querySelector<HTMLElement>(".site-header");
+      const alignmentTarget = id === "playground"
+        ? document.getElementById("playground-title") ?? target
+        : target;
+      const headerBottom = header?.getBoundingClientRect().bottom ?? 0;
+      const alignmentMargin = Number.parseFloat(
+        window.getComputedStyle(alignmentTarget).scrollMarginTop,
+      );
+      const alignmentGap = id === "playground" && Number.isFinite(alignmentMargin)
+        ? alignmentMargin
+        : 0;
+      let targetTop = 0;
+      let offsetNode: HTMLElement | null = alignmentTarget;
+      while (offsetNode) {
+        targetTop += offsetNode.offsetTop;
+        offsetNode = offsetNode.offsetParent as HTMLElement | null;
+      }
+      const delta = targetTop - window.scrollY - headerBottom - alignmentGap;
+      const previousScrollBehavior = root.style.scrollBehavior;
+      root.style.scrollBehavior = "auto";
+      window.scrollTo({
+        behavior: "auto",
+        top: Math.max(0, window.scrollY + delta),
+      });
+      root.style.scrollBehavior = previousScrollBehavior;
+
+      attempts += 1;
+      stableFrames = Math.abs(delta) < 0.5 ? stableFrames + 1 : 0;
+      if (stableFrames < 2 && attempts < 60) {
+        frame = window.requestAnimationFrame(alignHashTarget);
+      }
+    };
+
+    const userEvents = ["keydown", "pointerdown", "touchstart", "wheel"] as const;
+    for (const eventName of userEvents) {
+      window.addEventListener(eventName, cancelAlignment, { passive: true, once: true });
+    }
+
+    void document.fonts.ready.then(() => {
+      if (!cancelled) frame = window.requestAnimationFrame(alignHashTarget);
+    });
+
+    return () => {
+      cancelAlignment();
+      for (const eventName of userEvents) {
+        window.removeEventListener(eventName, cancelAlignment);
+      }
+    };
+  }, [enabled]);
 }
 
 function renderWithBreaks(text: string, breaks: readonly number[]): ReactNode {
@@ -126,7 +201,7 @@ function renderSemanticDiff(
       const changed = isWord && lineIndexAt(partStart, nativeBreaks) !== semanticLineIndex;
       content.push(
         changed ? (
-          <span className="semantic-diff-changed" key={`changed-${partStart}`}>{part}</span>
+          <span className="gradient-text-safe semantic-diff-changed" key={`changed-${partStart}`}>{part}</span>
         ) : (
           <Fragment key={`text-${partStart}`}>{part}</Fragment>
         ),
@@ -142,14 +217,15 @@ function renderSemanticDiff(
 
 function Playground({ locale }: { locale: SiteLocale }) {
   const content = landingContent[locale];
-  const { demoHeadlines, playground } = content;
+  const { examples, playground } = content;
   const model = titleModels[locale];
   const paneBodyRef = useRef<HTMLDivElement>(null);
   const dragPointerRef = useRef<number | null>(null);
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const [measureDragging, setMeasureDragging] = useState(false);
   const { maxWidth, setWidth, width } = useMeasureWidth(paneBodyRef);
-  const text = demoHeadlines[headlineIndex] ?? demoHeadlines[0] ?? "";
+  const currentExample = examples[headlineIndex] ?? examples[0];
+  const text = currentExample.text;
   const { ref, selection, diagnostics } = useSemanticWrap({
     text,
     model,
@@ -206,19 +282,32 @@ function Playground({ locale }: { locale: SiteLocale }) {
           <h2 id="playground-title">Playground</h2>
         </motion.div>
 
-        <div className={`measure-instrument${measureDragging ? " is-dragging" : ""}`}>
+        <div
+          className={`measure-instrument${measureDragging ? " is-dragging" : ""}`}
+          data-result={currentSelection?.applied ? "applied" : "native"}
+          data-semantic-phrase={currentExample.semanticPhrase}
+        >
           <div className="headline-presets" role="group" aria-label={playground.presetLabel}>
-            {demoHeadlines.map((headline, index) => (
+            {examples.map((example, index) => (
               <button
                 type="button"
-                key={headline}
+                key={example.id}
                 className={index === headlineIndex ? "is-current" : undefined}
                 aria-pressed={index === headlineIndex}
-                onClick={() => setHeadlineIndex(index)}
+                onClick={() => {
+                  const availableWidth = paneBodyRef.current
+                    ? availableMeasureWidth(paneBodyRef.current)
+                    : maxWidth;
+                  setHeadlineIndex(index);
+                  setWidth(
+                    example.playgroundMeasures.find((measure) => measure <= availableWidth)
+                      ?? Math.min(240, availableWidth),
+                  );
+                }}
               >
-                <span>{playground.example} 0{index + 1}</span>
+                <span className="gradient-text-safe">{playground.example} 0{index + 1}</span>
                 <SemanticWrap model={model}>
-                  <strong>{headline}</strong>
+                  <strong>{example.text}</strong>
                 </SemanticWrap>
               </button>
             ))}
@@ -227,7 +316,7 @@ function Playground({ locale }: { locale: SiteLocale }) {
           <div className="measure-comparison">
             <article className="measure-pane is-browser" aria-labelledby="browser-measure-label">
               <div className="measure-pane-head">
-                <span id="browser-measure-label"><b>01</b> {playground.browser}</span>
+                <span id="browser-measure-label"><b className="gradient-text-safe">01</b> {playground.browser}</span>
                 <span>{playground.lines(nativeLineCount)}</span>
               </div>
               <div className="measure-pane-body" ref={paneBodyRef}>
@@ -254,8 +343,8 @@ function Playground({ locale }: { locale: SiteLocale }) {
 
             <article className="measure-pane is-semantic" aria-labelledby="semantic-measure-label">
               <div className="measure-pane-head">
-                <span id="semantic-measure-label"><b>02</b> {playground.semantic}</span>
-                <span>{playground.lines(semanticLineCount)}</span>
+                <span className="gradient-text-safe" id="semantic-measure-label"><b>02</b> {playground.semantic}</span>
+                <span className="gradient-text-safe">{playground.lines(semanticLineCount)}</span>
               </div>
               <div className="measure-pane-body">
                 <div className="headline-measure" style={{ width: `${width}px` }}>
@@ -325,6 +414,7 @@ function getProcessLayoutEntries(
 ): readonly ProcessLayoutEntry[] {
   if (!diagnostics) return [];
 
+  const nativeBreaks = diagnostics.nativeLayout?.breaks.join(":");
   const nativeEntry = diagnostics.nativeLayout
     ? [{
         id: "N",
@@ -332,11 +422,15 @@ function getProcessLayoutEntries(
         source: "browser" as const,
       }]
     : [];
-  const calculatedEntries = diagnostics.calculatedLayouts.map((layout, index) => ({
-    id: String.fromCharCode(65 + index),
-    layout,
-    source: "calculated" as const,
-  }));
+  const calculatedEntries: ProcessLayoutEntry[] = [];
+  for (const layout of diagnostics.calculatedLayouts) {
+    if (layout.breaks.join(":") === nativeBreaks) continue;
+    calculatedEntries.push({
+      id: String.fromCharCode(65 + calculatedEntries.length),
+      layout,
+      source: "calculated",
+    });
+  }
 
   return [...nativeEntry, ...calculatedEntries];
 }
@@ -375,7 +469,7 @@ function ProcessCandidates({
           <span>{segment.text}</span>
           {segment.candidate ? (
             <i
-              className={segment.candidate.level === null ? "is-fallback" : "is-predicted"}
+              className={`gradient-text-safe ${segment.candidate.level === null ? "is-fallback" : "is-predicted"}`}
               title={
                 segment.candidate.level === null
                   ? content.process.fallbackCandidate
@@ -411,6 +505,7 @@ function ProcessLayoutOptions({
   return (
     <div
       className="process-layout-options"
+      lang={locale}
       aria-label={content.process.layoutLabel}
     >
       {layouts.map((entry, index) => {
@@ -428,7 +523,7 @@ function ProcessLayoutOptions({
               repeat: Infinity,
             }}
           >
-            <span className="process-layout-id">{entry.id}</span>
+            <span className="gradient-text-safe process-layout-id">{entry.id}</span>
             <p lang={locale}>
               {entry.layout.lines.map((line, lineIndex) => (
                 <Fragment key={`${entry.id}-${lineIndex}-${line}`}>
@@ -470,6 +565,7 @@ function ProcessSelectionComparison({
     <div
       className="process-selection-comparison"
       data-result={selection.applied ? "applied" : "native"}
+      data-semantic-phrase={content.process.semanticPhrase}
       aria-label={content.process.selectionLabel}
     >
       <article className="process-selection-card is-native">
@@ -489,9 +585,9 @@ function ProcessSelectionComparison({
 
 function ProcessStage({ activeStep, locale }: { activeStep: number; locale: SiteLocale }) {
   const content = landingContent[locale];
-  const processExampleText = content.demoHeadlines[2];
-  const processSemanticReason = content.examples[2]?.semanticDescription ?? content.process.nativeKept;
-  const processMeasureWidth = locale === "ko" ? 220 : 300;
+  const processExampleText = content.process.example;
+  const processSemanticReason = content.process.selectionReason;
+  const processMeasureWidth = locale === "ko" ? 220 : 345;
   const { ref, selection, diagnostics } = useSemanticWrap({
     text: processExampleText,
     model: titleModels[locale],
@@ -525,7 +621,7 @@ function ProcessStage({ activeStep, locale }: { activeStep: number; locale: Site
       {...revealMotion}
     >
       <div className="process-stage-head">
-        <strong>0{activeStep + 1} / 03</strong>
+        <strong className="gradient-text-safe">0{activeStep + 1} / 03</strong>
       </div>
       <p
         className="process-measure-source"
@@ -620,7 +716,7 @@ function ProcessSection({ locale }: { locale: SiteLocale }) {
                   onFocus={() => setActiveStep(index)}
                   onPointerEnter={() => setActiveStep(index)}
                 >
-                  <span className="process-number">{step.number}</span>
+                  <span className="gradient-text-safe process-number">{step.number}</span>
                   <span className="process-step-copy">
                     <LocalizedSemanticWrap locale={locale}>
                       <strong>{step.title}</strong>
@@ -643,6 +739,8 @@ export function App() {
     || window.location.pathname.startsWith("/docs/")
     || window.location.pathname === "/ko/docs"
     || window.location.pathname.startsWith("/ko/docs/");
+
+  useInitialLandingHash(!isDocs);
 
   useEffect(() => {
     const canonicalPath = isDocs ? docsPath(locale) : landingPath(locale);

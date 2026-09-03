@@ -1,5 +1,6 @@
 <div align="center">
-  <img src="./assets/semantic-wrap.webp" alt="semantic-wrap" />
+  <img src="./assets/semantic-wrap-lockup.webp" alt="semantic-wrap" />
+  <br />
   <p>
     <a href="https://www.npmjs.com/package/@semantic-wrap/core"><img src="https://img.shields.io/npm/v/@semantic-wrap/core.svg?style=flat-square&colorA=000&colorB=000" alt="npm version" /></a>
     <a href="https://www.npmjs.com/package/@semantic-wrap/core"><img src="https://img.shields.io/npm/dm/@semantic-wrap/core.svg?style=flat-square&colorA=000&colorB=000" alt="npm downloads" /></a>
@@ -17,6 +18,12 @@ browser's native wrapping and inserts `<br>` elements when the calculated layout
 Both the model and the selection strategy are replaceable, and experimental presets are
 available for English and Korean titles. The project began as an attempt to reproduce the line
 breaks that feel natural when reading Korean text.
+
+## Playground
+
+<a href="https://semantic-wrap.woohyunpark.xyz/#playground">
+  <img src="./assets/playground-preview.webp" alt="Open the interactive playground comparing CSS balance and semantic-wrap with the same English headline and width" />
+</a>
 
 ## Examples
 

@@ -3,17 +3,15 @@ import type { SiteLocale } from "./site-config";
 export type LineBreakExample = {
   id: string;
   text: string;
-  pieces: readonly string[];
-  nativeBreakAfter: number;
-  semanticBreakAfter: number;
-  focusIndex: number;
+  semanticPhrase: string;
+  introMeasureEm: number;
+  playgroundMeasures: readonly number[];
   nativeDescription: string;
   semanticDescription: string;
 };
 
 export type LandingContent = {
-  demoHeadlines: readonly [string, string, string];
-  examples: readonly LineBreakExample[];
+  examples: readonly [LineBreakExample, LineBreakExample, LineBreakExample];
   intro: {
     installCommand: string;
     start: string;
@@ -35,6 +33,9 @@ export type LandingContent = {
     widthValue: (width: number) => string;
   };
   process: {
+    example: string;
+    semanticPhrase: string;
+    selectionReason: string;
     title: string;
     lead: string;
     ariaLabel: string;
@@ -59,49 +60,45 @@ export type LandingContent = {
 
 const koreanHeadlines = [
   "디자인 시스템을 도입하기 전에 반드시 확인해야 할 기준",
-  "사용자를 이해하고, 더 나은 해결책을 만드는 방법",
-  "효율적인 회의를 만들기 위해 버려야 할 습관",
+  "사용자 맥락을 이해하고 더 나은 해결책을 만드는 방법",
+  "더 나은 제품을 만들기 위해 팀이 버려야 할 습관",
 ] as const;
 
 const englishHeadlines = [
-  "Strong teams disagree openly while keeping the shared goal visible",
-  "Security decisions work better when they begin during product design",
-  "Write headlines for readers not for internal approval",
+  "Write clear headlines for readers, not for reviewers",
+  "Earn customer trust before asking for more data",
+  "Design documentation for people who need to act",
 ] as const;
 
 export const landingContent: Record<SiteLocale, LandingContent> = {
   ko: {
-    demoHeadlines: koreanHeadlines,
     examples: [
       {
         id: "before",
         text: koreanHeadlines[0],
-        pieces: ["디자인 시스템을 도입하기", "전에", "반드시 확인해야 할 기준"],
-        nativeBreakAfter: 0,
-        semanticBreakAfter: 1,
-        focusIndex: 1,
-        nativeDescription: "‘전에’가 다음 줄로 밀려 조건을 나타내는 구절이 갈라집니다.",
+        semanticPhrase: "도입하기 전에",
+        introMeasureEm: 13,
+        playgroundMeasures: [414, 308, 240],
+        nativeDescription: "CSS balance는 ‘전에’를 다음 줄로 밀어 조건을 나타내는 구절을 가릅니다.",
         semanticDescription: "‘도입하기 전에’를 같은 줄에 묶어 하나의 의미 단위로 유지합니다.",
       },
       {
         id: "readable",
         text: koreanHeadlines[1],
-        pieces: ["사용자를 이해하고,", "더 나은", "해결책을 만드는 방법"],
-        nativeBreakAfter: 1,
-        semanticBreakAfter: 0,
-        focusIndex: 1,
-        nativeDescription: "‘더 나은’이 서로 다른 줄에 놓여 수식 관계가 끊깁니다.",
-        semanticDescription: "쉼표 뒤에서 줄을 나눠 ‘더 나은’을 함께 읽도록 만듭니다.",
+        semanticPhrase: "더 나은",
+        introMeasureEm: 12,
+        playgroundMeasures: [414, 292, 240],
+        nativeDescription: "CSS balance는 ‘더’를 앞줄에 남겨 ‘더 나은’이라는 수식 관계를 가릅니다.",
+        semanticDescription: "‘더 나은’을 같은 줄에 두어 해결책을 꾸미는 의미를 유지합니다.",
       },
       {
         id: "purpose",
         text: koreanHeadlines[2],
-        pieces: ["효율적인 회의를", "만들기", "위해 버려야 할 습관"],
-        nativeBreakAfter: 1,
-        semanticBreakAfter: 0,
-        focusIndex: 1,
-        nativeDescription: "‘만들기’와 ‘위해’가 서로 다른 줄에 놓여 목적을 나타내는 표현이 갈라집니다.",
-        semanticDescription: "‘만들기 위해’를 한 줄에 묶어 목적을 분명하게 전달합니다.",
+        semanticPhrase: "만들기 위해",
+        introMeasureEm: 11,
+        playgroundMeasures: [414, 308, 246],
+        nativeDescription: "CSS balance는 ‘만들기’와 ‘위해’를 서로 다른 줄에 두어 목적을 나타내는 표현을 가릅니다.",
+        semanticDescription: "‘만들기 위해’를 같은 줄에 묶어 목적을 분명하게 전달합니다.",
       },
     ],
     intro: {
@@ -111,20 +108,23 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       copied: "복사됨",
       copyFailed: "복사하지 못했습니다",
       message: ["줄바꿈을", "자연스럽게"],
-      comparisonLabel: "브라우저 기본 줄바꿈과 semantic-wrap 비교",
-      nativeLabel: "브라우저 기본 줄바꿈",
+      comparisonLabel: "CSS balance와 semantic-wrap 줄바꿈 비교",
+      nativeLabel: "CSS balance 줄바꿈",
       semanticLabel: "semantic-wrap 의미 줄바꿈",
     },
     playground: {
       example: "예시",
       presetLabel: "예시 제목 선택",
-      browser: "브라우저 기본",
+      browser: "CSS balance",
       semantic: "semantic-wrap",
       lines: (count) => `${count}줄`,
       widthLabel: "제목 컨테이너 너비",
       widthValue: (width) => `${width}픽셀`,
     },
     process: {
+      example: "효율적인 회의를 만들기 위해 버려야 할 습관",
+      semanticPhrase: "만들기 위해",
+      selectionReason: "‘만들기 위해’를 한 줄에 묶어 목적을 분명하게 전달합니다.",
       title: "모델이 제안하고, 브라우저가 검증합니다.",
       lead: "모델이 찾은 의미 경계와 실제 렌더링 너비를 함께 비교해, 바꿀 가치가 있는 줄바꿈만 적용합니다.",
       ariaLabel: "작동 방식 실시간 미리보기",
@@ -140,7 +140,7 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       semanticCost: "의미 비용",
       beforeLabel: "BEFORE · 현재 CSS",
       afterLabel: "AFTER · semantic-wrap 적용 결과",
-      nativeKept: "브라우저 기본 줄바꿈이 이미 가장 적합해 변경하지 않았습니다.",
+      nativeKept: "현재 CSS 줄바꿈이 이미 가장 적합해 변경하지 않았습니다.",
       diagnostic: (candidates, predictions) => `실제 진단 · 후보 ${candidates}개 · 모델 예측 ${predictions}개`,
       measurement: (width, layouts) => `${width}px 실측 · 현재 CSS안 포함 ${layouts}개 레이아웃`,
       steps: [
@@ -151,37 +151,33 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
     },
   },
   en: {
-    demoHeadlines: englishHeadlines,
     examples: [
       {
-        id: "teams",
-        text: englishHeadlines[0],
-        pieces: ["Strong teams disagree openly", "while", "keeping the shared goal visible"],
-        nativeBreakAfter: 1,
-        semanticBreakAfter: 0,
-        focusIndex: 1,
-        nativeDescription: "The native wrap separates ‘while’ from the phrase it introduces.",
-        semanticDescription: "The model keeps ‘while keeping’ together as one meaningful phrase.",
-      },
-      {
-        id: "security",
-        text: englishHeadlines[1],
-        pieces: ["Security decisions work better", "when", "they begin during product design"],
-        nativeBreakAfter: 1,
-        semanticBreakAfter: 0,
-        focusIndex: 1,
-        nativeDescription: "The native wrap strands ‘when’ at the end of the first line.",
-        semanticDescription: "The model keeps the condition ‘when they begin’ together.",
-      },
-      {
         id: "readers",
+        text: englishHeadlines[0],
+        semanticPhrase: "for readers, not for reviewers",
+        introMeasureEm: 13,
+        playgroundMeasures: [418, 308, 246],
+        nativeDescription: "CSS balance separates ‘for’ from the audience contrast it introduces.",
+        semanticDescription: "The model keeps ‘for readers, not for reviewers’ together as one contrast.",
+      },
+      {
+        id: "trust",
+        text: englishHeadlines[1],
+        semanticPhrase: "before asking for more data",
+        introMeasureEm: 12,
+        playgroundMeasures: [414, 308, 240],
+        nativeDescription: "CSS balance separates ‘before’ from the action it introduces.",
+        semanticDescription: "The model keeps ‘before asking’ together as one meaningful phrase.",
+      },
+      {
+        id: "audience",
         text: englishHeadlines[2],
-        pieces: ["Write headlines for readers", "not", "for internal approval"],
-        nativeBreakAfter: 1,
-        semanticBreakAfter: 0,
-        focusIndex: 1,
-        nativeDescription: "The native wrap separates ‘not’ from the contrast it creates.",
-        semanticDescription: "The model keeps ‘not for internal approval’ together.",
+        semanticPhrase: "for people who need to act",
+        introMeasureEm: 12,
+        playgroundMeasures: [414, 308, 240],
+        nativeDescription: "CSS balance separates ‘for’ from the audience it introduces.",
+        semanticDescription: "The model keeps ‘for people who need to act’ together as one audience phrase.",
       },
     ],
     intro: {
@@ -191,20 +187,23 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       copied: "Copied",
       copyFailed: "Copy failed",
       message: ["Line breaks,", "naturally"],
-      comparisonLabel: "Browser-native and semantic-wrap line break comparison",
-      nativeLabel: "Browser-native wrapping",
+      comparisonLabel: "CSS balance and semantic-wrap line break comparison",
+      nativeLabel: "CSS balanced wrapping",
       semanticLabel: "semantic-wrap wrapping",
     },
     playground: {
       example: "Example",
       presetLabel: "Choose an example headline",
-      browser: "Browser native",
+      browser: "CSS balance",
       semantic: "semantic-wrap",
       lines: (count) => `${count} ${count === 1 ? "line" : "lines"}`,
       widthLabel: "Headline container width",
       widthValue: (width) => `${width} pixels`,
     },
     process: {
+      example: "Write clear headlines for readers, not for reviewers",
+      semanticPhrase: "for readers, not for reviewers",
+      selectionReason: "The selected layout keeps the full contrast ‘for readers, not for reviewers’ together without sacrificing balance.",
       title: "The model proposes. The browser verifies.",
       lead: "semantic-wrap compares model-predicted boundaries with real rendered widths, then changes only the line breaks worth changing.",
       ariaLabel: "Live preview of how semantic-wrap works",
@@ -220,7 +219,7 @@ export const landingContent: Record<SiteLocale, LandingContent> = {
       semanticCost: "Semantic cost",
       beforeLabel: "BEFORE · current CSS",
       afterLabel: "AFTER · semantic-wrap result",
-      nativeKept: "The browser-native wrap is already the best fit, so it was left unchanged.",
+      nativeKept: "The current CSS wrap is already the best fit, so it was left unchanged.",
       diagnostic: (candidates, predictions) => `Live diagnostics · ${candidates} candidates · ${predictions} model predictions`,
       measurement: (width, layouts) => `${width}px measured · ${layouts} layouts including current CSS`,
       steps: [

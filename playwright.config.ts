@@ -5,7 +5,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? "github" : "list",
+  reporter: process.env.CI
+    ? [["github"], ["html", { open: "never", outputFolder: "playwright-report" }]]
+    : "list",
   use: {
     baseURL: "http://127.0.0.1:4191",
     trace: "retain-on-failure",
@@ -34,7 +36,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: "bun run --cwd apps/docs dev --host 127.0.0.1 --port 4192 --strictPort",
+      command: "bun run --cwd apps/docs preview --host 127.0.0.1 --port 4192 --strictPort",
       url: "http://127.0.0.1:4192",
       reuseExistingServer: false,
       stdout: "pipe",

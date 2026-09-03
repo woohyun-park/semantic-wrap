@@ -58,7 +58,7 @@ export function BrandMark() {
 export function Wordmark() {
   return (
     <span className="wordmark" aria-label="semantic-wrap">
-      semantic-<span>wrap</span>
+      semantic-<span className="gradient-text-safe">wrap</span>
     </span>
   );
 }
@@ -113,35 +113,37 @@ export function SiteHeader({
   return (
     <header className={`site-header${isBrandHidden ? " is-hero-brand-visible" : ""}`}>
       <div className="site-header-inner page-width">
-        <a
-          className="brand-link"
-          href={landingPath(locale)}
-          aria-label={copy.home}
-          aria-hidden={isBrandHidden}
-          tabIndex={isBrandHidden ? -1 : undefined}
-        >
-          <BrandLockup />
-        </a>
-        <nav className="main-nav" aria-label={copy.nav}>
+        <div className="site-header-content">
           <a
-            href={docsPath(locale)}
-            aria-current={current === "docs" ? "page" : undefined}
+            className="brand-link"
+            href={landingPath(locale)}
+            aria-label={copy.home}
+            aria-hidden={isBrandHidden}
+            tabIndex={isBrandHidden ? -1 : undefined}
           >
-            {copy.docs}
+            <BrandLockup />
           </a>
-          <a className="locale-link" href={alternateHref} hrefLang={locale === "ko" ? "en" : "ko"}>
-            {copy.switch}
+          <nav className="main-nav" aria-label={copy.nav}>
+            <a
+              href={docsPath(locale)}
+              aria-current={current === "docs" ? "page" : undefined}
+            >
+              {copy.docs}
+            </a>
+            <a className="locale-link" href={alternateHref} hrefLang={locale === "ko" ? "en" : "ko"}>
+              {copy.switch}
+            </a>
+          </nav>
+          <a
+            className="github-link"
+            href={repositoryUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={copy.github}
+          >
+            <GitHubIcon />
           </a>
-        </nav>
-        <a
-          className="github-link"
-          href={repositoryUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={copy.github}
-        >
-          <GitHubIcon />
-        </a>
+        </div>
       </div>
     </header>
   );

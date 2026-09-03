@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/noto-sans-kr": "5.3.0",
     "@semantic-wrap/core": "workspace:*",
     "@semantic-wrap/en": "workspace:*",
     "@semantic-wrap/ko": "workspace:*",
