@@ -73,6 +73,8 @@ test("keeps the desktop process panels at one shared height", async ({ page }) =
   expect(Math.max(...rowHeights) - Math.min(...rowHeights)).toBeLessThan(1);
 
   await page.locator('.process-list [data-process-step="1"] button').click();
+  await expect(page.locator(".process-stage-scene")).toHaveCount(1);
+  await expect(page.locator(".process-layout-options")).toBeVisible();
   const verticalCenters = await page.locator(
     ".process-stage-scene, .process-layout-options",
   ).evaluateAll((elements) => elements.map((element) => {
@@ -117,17 +119,17 @@ test("reveals the intro message in four distinct scroll stages", async ({ page }
 
   await scrollToStoryPosition(1.2);
   await expect(story).toHaveAttribute("data-intro-message-phase", "blank");
-  await expect(source).toHaveCSS("animation-name", "none");
-  await expect(highlight).toHaveCSS("animation-name", "none");
+  await expect(source).toHaveCSS("opacity", "0");
+  await expect(highlight).toHaveCSS("opacity", "0");
 
   await scrollToStoryPosition(1.6);
   await expect(story).toHaveAttribute("data-intro-message-phase", "source");
-  await expect(source).toHaveCSS("animation-name", "intro-message-word-enter");
-  await expect(highlight).toHaveCSS("animation-name", "none");
+  await expect(source).toHaveCSS("opacity", "1");
+  await expect(highlight).toHaveCSS("opacity", "0");
 
   await scrollToStoryPosition(2.2);
   await expect(story).toHaveAttribute("data-intro-message-phase", "complete");
-  await expect(highlight).toHaveCSS("animation-name", "intro-message-word-enter");
+  await expect(highlight).toHaveCSS("opacity", "1");
   await expect(story).not.toHaveAttribute("data-shimmer-active", "true");
 
   await scrollToStoryPosition(2.69);
@@ -153,9 +155,11 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
       backgroundImage: styles.backgroundImage,
       backgroundSize: styles.backgroundSize,
       filter: styles.filter,
-      animationDelay: styles.animationDelay,
-      animationDuration: styles.animationDuration,
     };
+  });
+  const readScale = async (selector: string) => page.locator(selector).evaluate((element) => {
+    const transform = window.getComputedStyle(element).transform;
+    return transform === "none" ? 1 : new DOMMatrixReadOnly(transform).a;
   });
 
   const story = page.locator(".intro-story");
@@ -167,58 +171,28 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
   const messageTargetSelector =
     '.intro-message-stage[data-intro-current="true"] .text-shimmer-target';
   await expect(story).not.toHaveAttribute("data-shimmer-active", "true");
-  await expect(page.locator(messageShimmerSelector)).toHaveCSS("animation-name", "none");
+  await expect(page.locator(messageTargetSelector)).toHaveAttribute("data-motion-shimmer", "idle");
 
   await scrollToStoryPosition(2.56);
   await expect(story).toHaveAttribute("data-shimmer-active", "true");
-  await expect(page.locator(messageShimmerSelector)).toHaveCSS(
-    "animation-name",
-    "story-text-shimmer",
-  );
-  const firstTime = await page.locator(messageShimmerSelector).evaluate((element) =>
-    Number(element.getAnimations()[0]?.currentTime ?? 0));
-  await page.waitForTimeout(120);
-  const secondTime = await page.locator(messageShimmerSelector).evaluate((element) =>
-    Number(element.getAnimations()[0]?.currentTime ?? 0));
-  expect(secondTime).toBeGreaterThan(firstTime);
+  await expect(page.locator(messageTargetSelector)).toHaveAttribute("data-motion-shimmer", "active");
+  await page.waitForTimeout(55);
+  expect(await readScale(messageTargetSelector)).toBeLessThan(0.99);
+  await expect.poll(async () => Number(
+    await page.locator(messageShimmerSelector).evaluate((element) =>
+      window.getComputedStyle(element).opacity),
+  )).toBeGreaterThan(0.5);
   const messageShimmer = await readShimmer(messageShimmerSelector);
-  expect(messageShimmer.animationDuration).toBe("0.35s");
-  expect(messageShimmer.animationDelay).toBe("0.08s");
-  await expect(page.locator(messageTargetSelector)).toHaveCSS(
-    "animation-name",
-    "shimmer-target-spring",
-  );
-  await expect(page.locator(messageTargetSelector)).toHaveCSS("animation-duration", "0.4s");
-  const springCompression = await page.locator(messageTargetSelector).evaluate((element) => {
-    const animation = element.getAnimations()[0];
-    animation?.pause();
-    if (animation) animation.currentTime = 70;
-    const styles = window.getComputedStyle(element);
-    const transform = new DOMMatrixReadOnly(styles.transform);
-    return {
-      filter: styles.filter,
-      scale: transform.a,
-      translateY: transform.m42,
-    };
-  });
-  expect(springCompression.scale).toBeLessThanOrEqual(0.956);
-  expect(springCompression.translateY).toBe(0);
-  expect(springCompression.filter).toBe("none");
-  const springRelease = await page.locator(messageTargetSelector).evaluate((element) => {
-    const animation = element.getAnimations()[0];
-    animation?.pause();
-    if (animation) animation.currentTime = 200;
-    return new DOMMatrixReadOnly(window.getComputedStyle(element).transform).a;
-  });
-  expect(springRelease).toBeGreaterThan(1);
-  expect(springRelease).toBeLessThan(1.01);
+  await expect.poll(() => readScale(messageTargetSelector)).toBe(1);
+  await page.waitForTimeout(300);
+  await expect(page.locator(messageShimmerSelector)).toHaveCSS("opacity", "0");
+  await expect(page.locator(messageShimmerSelector)).toHaveCSS("background-position", "-30% 50%");
   const messageTargetGradient = await page.locator(messageTargetSelector).evaluate((element) =>
     window.getComputedStyle(element).backgroundImage);
   expect(messageTargetGradient).toContain("linear-gradient");
 
   await scrollToStoryPosition(1.2);
   await expect(story).not.toHaveAttribute("data-shimmer-active", "true");
-  await expect(page.locator(messageShimmerSelector)).toHaveCSS("animation-name", "none");
 
   await scrollToStoryPosition(3.7);
   await expect(
@@ -231,9 +205,8 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
     '.line-break-composition[data-intro-current="true"][data-semantic="true"]',
   );
   await expect(semanticScene).toBeVisible();
-  const flipIsRunning = async () => semanticScene.locator("[data-flip-piece]").evaluateAll(
-    (pieces) => pieces.some((piece) =>
-      piece.getAnimations().some((animation) => animation.playState === "running")),
+  const flipIsRunning = async () => semanticScene.locator("[data-motion-layout]").evaluateAll(
+    (pieces) => pieces.some((piece) => window.getComputedStyle(piece).transform !== "none"),
   );
   expect(await flipIsRunning()).toBe(true);
   await expect(story).not.toHaveAttribute("data-shimmer-active", "true");
@@ -253,14 +226,7 @@ test("triggers one shared shimmer after crossing the scene threshold", async ({ 
   expect(exampleShimmer.backgroundSize).toBe(messageShimmer.backgroundSize);
   expect(exampleShimmer.filter).toContain("rgba(83, 139, 246, 0.68)");
   expect(messageShimmer.filter).toContain("rgba(83, 139, 246, 0.68)");
-  expect(exampleShimmer.animationDuration).toBe(messageShimmer.animationDuration);
-  expect(exampleShimmer.animationDelay).toBe("0.08s");
-  await expect(page.locator(exampleTargetSelector)).toHaveCSS(
-    "animation-name",
-    "shimmer-target-spring",
-  );
-  await expect(page.locator(exampleTargetSelector)).toHaveCSS("animation-duration", "0.4s");
-  await expect(page.locator(exampleTargetSelector)).toHaveCSS("animation-delay", "0s");
+  await expect(page.locator(exampleTargetSelector)).toHaveAttribute("data-motion-shimmer", "active");
   const exampleTargetGradient = await page.locator(exampleTargetSelector).evaluate((element) =>
     window.getComputedStyle(element).backgroundImage);
   expect(exampleTargetGradient).toBe(messageTargetGradient);

@@ -13,6 +13,7 @@
     "@semantic-wrap/core": "workspace:*",
     "@semantic-wrap/ko": "workspace:*",
     "@semantic-wrap/react": "workspace:*",
+    "motion": "^13.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

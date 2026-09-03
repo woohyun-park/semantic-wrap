@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { MotionConfig } from "motion/react";
 import { App } from "./App";
 import "./styles.css";
 import "./docs.css";
@@ -10,6 +11,8 @@ if (!root) throw new Error("Root element was not found");
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <MotionConfig reducedMotion="user">
+      <App />
+    </MotionConfig>
   </StrictMode>,
 );

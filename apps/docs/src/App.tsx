@@ -8,9 +8,7 @@ import type {
 } from "@semantic-wrap/core";
 import {
   Fragment,
-  useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -18,8 +16,35 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import {
+  AnimatePresence,
+  LayoutGroup,
+  motion,
+  useAnimationControls,
+  useIsPresent,
+  useMotionValueEvent,
+  useReducedMotion as usePrefersReducedMotion,
+  useScroll,
+} from "motion/react";
 import { DocsApp } from "./Docs";
+import {
+  getIntroStoryScene,
+  introStoryTimelineUnits,
+  useIntroStoryMotion,
+  type IntroMessagePhase,
+  type IntroStoryScene,
+} from "./intro-story-motion";
 import { KoreanSemanticWrap } from "./KoreanSemanticWrap";
+import {
+  easeOutExpo,
+  easeOutQuint,
+  headlineLayoutTransition,
+  shimmerCompression,
+  shimmerMotion,
+  shimmerRelease,
+  storySceneVariants,
+  viewReveal,
+} from "./motion-config";
 import {
   ArrowIcon,
   BrandLockup,
@@ -49,40 +74,6 @@ type LineBreakExample = {
   nativeDescription: string;
   semanticDescription: string;
 };
-
-type FlipRectsRef = {
-  current: Map<string, DOMRect>;
-};
-
-type IntroStoryScene =
-  | { kind: "hero" }
-  | { kind: "message" }
-  | { kind: "headline"; exampleIndex: number; semantic: boolean };
-
-type IntroStoryState = {
-  stepIndex: number;
-  direction: 1 | -1;
-  previous: IntroStoryScene | null;
-};
-
-type StoryShimmerState = {
-  armed: boolean;
-  layoutReady: boolean;
-  scaledProgress: number;
-  sceneProgress: number;
-  stepIndex: number;
-  thresholdCrossed: boolean;
-};
-
-const storyShimmerResetPoint = 0.15;
-const storyShimmerTriggerPoint = 0.45;
-const storyMessageSourcePoint = 0.2;
-const storyMessageCompletePoint = 0.45;
-const storyMessageShimmerTriggerPoint = 0.7;
-const introHeroSceneWeight = 1;
-const introMessageSceneWeight = 2.2;
-const introBeforeSceneWeight = 1.1;
-const introAfterSceneWeight = 1.7;
 
 const lineBreakExamples: readonly LineBreakExample[] = [
   {
@@ -116,42 +107,6 @@ const lineBreakExamples: readonly LineBreakExample[] = [
     semanticDescription: "‘만들기 위해’를 한 줄에 묶어 목적을 분명하게 전달합니다.",
   },
 ];
-
-const introStorySceneWeights = [
-  introHeroSceneWeight,
-  introMessageSceneWeight,
-  ...lineBreakExamples.flatMap(() => [
-    introBeforeSceneWeight,
-    introAfterSceneWeight,
-  ]),
-];
-const introStoryTimelineUnits = introStorySceneWeights.reduce(
-  (total, weight) => total + weight,
-  0,
-);
-
-function getIntroStoryScrollState(progress: number) {
-  const timelineProgress = progress * introStoryTimelineUnits;
-  let sceneStart = 0;
-
-  for (let stepIndex = 0; stepIndex < introStorySceneWeights.length; stepIndex += 1) {
-    const sceneWeight = introStorySceneWeights[stepIndex] ?? 1;
-    const isLastScene = stepIndex === introStorySceneWeights.length - 1;
-    if (timelineProgress < sceneStart + sceneWeight || isLastScene) {
-      return {
-        scaledProgress: timelineProgress,
-        sceneProgress: Math.min(
-          1,
-          Math.max(0, (timelineProgress - sceneStart) / sceneWeight),
-        ),
-        stepIndex,
-      };
-    }
-    sceneStart += sceneWeight;
-  }
-
-  return { scaledProgress: timelineProgress, sceneProgress: 1, stepIndex: 0 };
-}
 
 function useMeasureWidth(paneBodyRef: RefObject<HTMLDivElement | null>) {
   const previousMaxWidth = useRef(640);
@@ -190,320 +145,6 @@ function useMeasureWidth(paneBodyRef: RefObject<HTMLDivElement | null>) {
   }, [paneBodyRef]);
 
   return { maxWidth, setWidth, width };
-}
-
-function useFlipHeadline(
-  headlineRef: RefObject<HTMLParagraphElement | null>,
-  semantic: boolean,
-  flipRectsRef?: FlipRectsRef,
-  sceneStepIndex?: number,
-  onLayoutSettled?: (stepIndex: number) => void,
-) {
-  useLayoutEffect(() => {
-    const headline = headlineRef.current;
-    if (!headline || !flipRectsRef) return;
-
-    const pieces = Array.from(headline.querySelectorAll<HTMLElement>("[data-flip-piece]"));
-    const nextRects = new Map(
-      pieces.map((piece) => [piece.dataset.flipPiece ?? "", piece.getBoundingClientRect()]),
-    );
-    const previous = flipRectsRef.current;
-    flipRectsRef.current = new Map();
-
-    if (previous.size === 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      if (sceneStepIndex !== undefined) onLayoutSettled?.(sceneStepIndex);
-      return;
-    }
-
-    const animations: Animation[] = [];
-    for (const piece of pieces) {
-      const before = previous.get(piece.dataset.flipPiece ?? "");
-      const after = nextRects.get(piece.dataset.flipPiece ?? "");
-      if (!before || !after) continue;
-
-      const deltaX = before.left - after.left;
-      const deltaY = before.top - after.top;
-      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) continue;
-
-      const animation = piece.animate(
-        [
-          { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
-          { transform: "translate3d(0, 0, 0)" },
-        ],
-        {
-          duration: 480,
-          easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-          fill: "both",
-        },
-      );
-      animations.push(animation);
-    }
-
-    if (animations.length === 0) {
-      if (sceneStepIndex !== undefined) onLayoutSettled?.(sceneStepIndex);
-      return;
-    }
-
-    let cancelled = false;
-    void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
-      for (const animation of animations) animation.cancel();
-      if (!cancelled && sceneStepIndex !== undefined) onLayoutSettled?.(sceneStepIndex);
-    });
-
-    return () => {
-      cancelled = true;
-      for (const animation of animations) animation.cancel();
-    };
-  }, [flipRectsRef, headlineRef, onLayoutSettled, sceneStepIndex, semantic]);
-}
-
-function getIntroStoryScene(stepIndex: number): IntroStoryScene {
-  if (stepIndex === 0) return { kind: "hero" };
-  if (stepIndex === 1) return { kind: "message" };
-
-  const headlineStep = stepIndex - 2;
-  return {
-    kind: "headline",
-    exampleIndex: Math.floor(headlineStep / 2),
-    semantic: headlineStep % 2 === 1,
-  };
-}
-
-function sceneUsesShimmer(scene: IntroStoryScene) {
-  return scene.kind === "message" || (scene.kind === "headline" && scene.semantic);
-}
-
-function syncStoryMessagePhase(
-  story: HTMLElement,
-  scene: IntroStoryScene,
-  sceneProgress: number,
-) {
-  if (scene.kind !== "message") {
-    story.removeAttribute("data-intro-message-phase");
-    return;
-  }
-
-  const phase = sceneProgress >= storyMessageCompletePoint
-    ? "complete"
-    : sceneProgress >= storyMessageSourcePoint
-      ? "source"
-      : "blank";
-  story.setAttribute("data-intro-message-phase", phase);
-}
-
-function syncStoryShimmer(
-  story: HTMLElement,
-  stateRef: { current: StoryShimmerState },
-  settleTimerRef: { current: number | null },
-  nextStepIndex: number,
-  sceneProgress: number,
-  scaledProgress: number,
-) {
-  const previous = stateRef.current;
-  const sceneChanged = previous.stepIndex !== nextStepIndex;
-  const movingForward = scaledProgress > previous.scaledProgress;
-  const nextScene = getIntroStoryScene(nextStepIndex);
-  const triggerPoint = nextScene.kind === "message"
-    ? storyMessageShimmerTriggerPoint
-    : storyShimmerTriggerPoint;
-  let armed = sceneChanged ? movingForward : previous.armed;
-  const layoutReady = sceneChanged
-    ? !sceneUsesShimmer(nextScene) || nextScene.kind === "message"
-    : previous.layoutReady;
-  let thresholdCrossed = sceneChanged ? false : previous.thresholdCrossed;
-
-  if (sceneChanged) {
-    if (settleTimerRef.current !== null) {
-      window.clearTimeout(settleTimerRef.current);
-      settleTimerRef.current = null;
-    }
-    story.removeAttribute("data-shimmer-active");
-  }
-  if (sceneProgress <= storyShimmerResetPoint) {
-    armed = true;
-    thresholdCrossed = false;
-    story.removeAttribute("data-shimmer-active");
-  }
-
-  const crossedTrigger = sceneChanged
-    ? sceneProgress >= triggerPoint
-    : previous.sceneProgress < triggerPoint
-      && sceneProgress >= triggerPoint;
-  if (movingForward && armed && crossedTrigger && sceneUsesShimmer(nextScene)) {
-    thresholdCrossed = true;
-    if (layoutReady) {
-      story.setAttribute("data-shimmer-active", "true");
-      armed = false;
-    }
-  }
-
-  stateRef.current = {
-    armed,
-    layoutReady,
-    scaledProgress,
-    sceneProgress,
-    stepIndex: nextStepIndex,
-    thresholdCrossed,
-  };
-}
-
-function useReducedMotion() {
-  const [reducedMotion, setReducedMotion] = useState(
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const syncPreference = () => setReducedMotion(media.matches);
-    media.addEventListener("change", syncPreference);
-    return () => media.removeEventListener("change", syncPreference);
-  }, []);
-
-  return reducedMotion;
-}
-
-function useIntroStoryState(
-  storyRef: RefObject<HTMLElement | null>,
-  flipRectsRef: FlipRectsRef,
-) {
-  const stepCount = introStorySceneWeights.length;
-  const [storyState, setStoryState] = useState<IntroStoryState>({
-    stepIndex: 0,
-    direction: 1,
-    previous: null,
-  });
-  const storyStateRef = useRef(storyState);
-  const shimmerStateRef = useRef<StoryShimmerState>({
-    armed: true,
-    layoutReady: true,
-    scaledProgress: 0,
-    sceneProgress: 0,
-    stepIndex: 0,
-    thresholdCrossed: false,
-  });
-  const shimmerSettleTimerRef = useRef<number | null>(null);
-
-  const markShimmerLayoutSettled = useCallback((settledStepIndex: number) => {
-    const story = storyRef.current;
-    const current = shimmerStateRef.current;
-    if (
-      !story
-      || current.stepIndex !== settledStepIndex
-      || !sceneUsesShimmer(getIntroStoryScene(settledStepIndex))
-    ) {
-      return;
-    }
-
-    if (shimmerSettleTimerRef.current !== null) {
-      window.clearTimeout(shimmerSettleTimerRef.current);
-    }
-    shimmerSettleTimerRef.current = window.setTimeout(() => {
-      shimmerSettleTimerRef.current = null;
-      const latest = shimmerStateRef.current;
-      if (latest.stepIndex !== settledStepIndex) return;
-
-      let armed = latest.armed;
-      if (latest.thresholdCrossed && armed) {
-        story.setAttribute("data-shimmer-active", "true");
-        armed = false;
-      }
-      shimmerStateRef.current = { ...latest, armed, layoutReady: true };
-    }, 50);
-  }, [storyRef]);
-
-  useEffect(() => {
-    storyStateRef.current = storyState;
-  }, [storyState]);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
-
-    let animationFrame = 0;
-    const syncStoryState = () => {
-      animationFrame = 0;
-      const story = storyRef.current;
-      const pin = story?.querySelector<HTMLElement>(".intro-story-pin");
-      if (!story || !pin) return;
-
-      const bounds = story.getBoundingClientRect();
-      const travel = Math.max(1, bounds.height - pin.getBoundingClientRect().height);
-      const progress = Math.min(1, Math.max(0, -bounds.top / travel));
-      const {
-        scaledProgress,
-        sceneProgress,
-        stepIndex: nextStepIndex,
-      } = getIntroStoryScrollState(progress);
-      const nextScene = getIntroStoryScene(nextStepIndex);
-      syncStoryMessagePhase(story, nextScene, sceneProgress);
-      syncStoryShimmer(
-        story,
-        shimmerStateRef,
-        shimmerSettleTimerRef,
-        nextStepIndex,
-        sceneProgress,
-        scaledProgress,
-      );
-
-      const current = storyStateRef.current;
-      if (nextStepIndex === current.stepIndex) return;
-
-      const currentScene = getIntroStoryScene(current.stepIndex);
-      const sameHeadline = currentScene.kind === "headline"
-        && nextScene.kind === "headline"
-        && currentScene.exampleIndex === nextScene.exampleIndex;
-
-      if (sameHeadline) {
-        const pieces = Array.from(
-          story.querySelectorAll<HTMLElement>(
-            '[data-intro-current="true"] [data-flip-piece]',
-          ),
-        );
-        flipRectsRef.current = new Map(
-          pieces.map((piece) => [
-            piece.dataset.flipPiece ?? "",
-            piece.getBoundingClientRect(),
-          ]),
-        );
-      } else {
-        flipRectsRef.current = new Map();
-      }
-
-      const nextState: IntroStoryState = {
-        stepIndex: nextStepIndex,
-        direction: nextStepIndex > current.stepIndex ? 1 : -1,
-        previous: sameHeadline ? null : currentScene,
-      };
-      storyStateRef.current = nextState;
-      setStoryState(nextState);
-    };
-    const scheduleStoryStateSync = () => {
-      if (animationFrame !== 0) return;
-      animationFrame = window.requestAnimationFrame(syncStoryState);
-    };
-
-    window.addEventListener("scroll", scheduleStoryStateSync, { passive: true });
-    window.addEventListener("resize", scheduleStoryStateSync);
-    syncStoryState();
-
-    return () => {
-      window.removeEventListener("scroll", scheduleStoryStateSync);
-      window.removeEventListener("resize", scheduleStoryStateSync);
-      if (animationFrame !== 0) window.cancelAnimationFrame(animationFrame);
-      if (shimmerSettleTimerRef.current !== null) {
-        window.clearTimeout(shimmerSettleTimerRef.current);
-      }
-    };
-  }, [flipRectsRef, stepCount, storyRef]);
-
-  const clearPrevious = () => {
-    const current = storyStateRef.current;
-    if (!current.previous) return;
-    const nextState = { ...current, previous: null };
-    storyStateRef.current = nextState;
-    setStoryState(nextState);
-  };
-
-  return { clearPrevious, markShimmerLayoutSettled, storyState };
 }
 
 function renderWithBreaks(text: string, breaks: readonly number[]): ReactNode {
@@ -615,58 +256,124 @@ function InstallCommand() {
   const copyLabel = copyState === "copied" ? "복사됨" : "복사하지 못했습니다";
 
   return (
-    <button
+    <motion.button
       type="button"
       className={`quick-install${copyState === "idle" ? "" : ` is-${copyState}`}`}
       onClick={copyCommand}
       aria-label="npm 설치 명령 복사"
+      animate={copyState === "copied" ? { scale: [1, 0.97, 1] } : { scale: 1 }}
+      transition={{ duration: 0.26, ease: easeOutExpo }}
     >
       <code><span aria-hidden="true">~ </span>{installCommand}</code>
       <span className="quick-install-icon" aria-hidden="true">
-        {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
+        <AnimatePresence initial={false} mode="wait">
+          <motion.span
+            className="quick-install-feedback-icon"
+            key={copyState === "copied" ? "check" : "copy"}
+            initial={{ opacity: 0, scale: 0.72 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.82 }}
+            transition={{ duration: 0.2, ease: easeOutExpo }}
+          >
+            {copyState === "copied" ? <CheckIcon /> : <CopyIcon />}
+          </motion.span>
+        </AnimatePresence>
       </span>
       <span className="visually-hidden" aria-live="polite">
         {copyState === "idle" ? "" : copyLabel}
       </span>
-    </button>
+    </motion.button>
   );
 }
 
-function TextShimmer({ children }: { children: string }) {
+function TextShimmer({ active, children }: { active: boolean; children: string }) {
+  const targetControls = useAnimationControls();
+  const shimmerControls = useAnimationControls();
+
+  useEffect(() => {
+    let cancelled = false;
+    targetControls.stop();
+    shimmerControls.stop();
+
+    if (!active) {
+      targetControls.set({ scale: 1 });
+      shimmerControls.set({ backgroundPosition: "130% 50%", opacity: 0 });
+      return undefined;
+    }
+
+    const playSpring = async () => {
+      await targetControls.start({
+        scale: shimmerCompression.scale,
+        transition: {
+          duration: shimmerCompression.duration,
+          ease: shimmerCompression.ease,
+        },
+      });
+      if (!cancelled) {
+        await targetControls.start({ scale: 1, transition: shimmerRelease });
+      }
+    };
+
+    void playSpring();
+    void shimmerControls.start({
+      backgroundPosition: [...shimmerMotion.positions],
+      opacity: [...shimmerMotion.opacity],
+      transition: {
+        delay: shimmerMotion.delay,
+        duration: shimmerMotion.duration,
+        ease: "linear",
+        times: [...shimmerMotion.times],
+      },
+    });
+
+    return () => {
+      cancelled = true;
+      targetControls.stop();
+      shimmerControls.stop();
+    };
+  }, [active, shimmerControls, targetControls]);
+
   return (
-    <span className="text-shimmer" aria-hidden="true">
+    <motion.span
+      animate={targetControls}
+      className="text-shimmer-target"
+      data-motion-shimmer={active ? "active" : "idle"}
+      initial={false}
+    >
       {children}
-    </span>
+      <motion.span
+        animate={shimmerControls}
+        className="text-shimmer"
+        initial={false}
+        aria-hidden="true"
+      >
+        {children}
+      </motion.span>
+    </motion.span>
   );
 }
 
 function LineBreakHeadline({
   example,
   semantic,
-  flipRectsRef,
+  shimmerActive,
+  staticScene = false,
   sceneStepIndex,
   onLayoutSettled,
 }: {
   example: LineBreakExample;
   semantic: boolean;
-  flipRectsRef?: FlipRectsRef;
+  shimmerActive: boolean;
+  staticScene?: boolean;
   sceneStepIndex?: number;
   onLayoutSettled?: (stepIndex: number) => void;
 }) {
-  const headlineRef = useRef<HTMLParagraphElement>(null);
-  useFlipHeadline(
-    headlineRef,
-    semantic,
-    flipRectsRef,
-    sceneStepIndex,
-    onLayoutSettled,
-  );
   const breakAfter = semantic ? example.semanticBreakAfter : example.nativeBreakAfter;
 
   return (
-    <p
+    <motion.p
       className="line-break-headline"
-      ref={headlineRef}
+      layout={staticScene ? false : true}
       aria-label={`${semantic ? "semantic-wrap 의미 줄바꿈" : "브라우저 기본 줄바꿈"}: ${example.text}`}
       lang="ko"
     >
@@ -681,55 +388,80 @@ function LineBreakHeadline({
 
         return (
           <Fragment key={`${example.id}-${piece}`}>
-            <span
+            <motion.span
               className={pieceClassName}
               data-flip-piece={`${example.id}-${index}`}
+              data-motion-layout={staticScene ? undefined : "position"}
               data-piece-index={index}
+              layout={staticScene ? false : "position"}
+              layoutDependency={semantic}
+              initial={staticScene ? false : { opacity: 0, y: 19 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                ...headlineLayoutTransition,
+                delay: index * 0.055,
+                duration: 0.62,
+                ease: easeOutExpo,
+              }}
+              onLayoutAnimationComplete={
+                index === example.focusIndex && sceneStepIndex !== undefined
+                  ? () => onLayoutSettled?.(sceneStepIndex)
+                  : undefined
+              }
               aria-hidden="true"
             >
               {shimmerTarget ? (
-                <span className="text-shimmer-target">
-                  {piece}
-                  <TextShimmer>{piece}</TextShimmer>
-                </span>
+                <TextShimmer active={shimmerActive}>{piece}</TextShimmer>
               ) : piece}
-            </span>
+            </motion.span>
             {index === breakAfter ? (
               <Fragment>
-                <span className="line-break-marker" aria-hidden="true">↵</span>
+                <motion.span
+                  className="line-break-marker"
+                  initial={staticScene ? false : { opacity: 0, scale: 0.8, y: "0.08em" }}
+                  animate={{ opacity: 1, scale: 1, y: "0.08em" }}
+                  transition={{ duration: 0.18, ease: easeOutExpo }}
+                  aria-hidden="true"
+                >
+                  ↵
+                </motion.span>
                 <span className="line-break-force" aria-hidden="true" />
               </Fragment>
             ) : null}
           </Fragment>
         );
       })}
-    </p>
+    </motion.p>
   );
 }
 
 type IntroStorySceneViewProps = {
-  current?: boolean;
+  direction?: 1 | -1;
+  messagePhase?: IntroMessagePhase | null;
   scene: IntroStoryScene;
   sceneStepIndex?: number;
-  status: "current" | "incoming" | "outgoing";
-  flipRectsRef?: FlipRectsRef;
-  onAnimationEnd?: () => void;
+  shimmerActive?: boolean;
+  staticScene?: boolean;
   onLayoutSettled?: (stepIndex: number) => void;
 };
 
 function IntroHeroScene({
-  current,
-  status,
-  onAnimationEnd,
-}: Omit<IntroStorySceneViewProps, "scene" | "flipRectsRef">) {
+  direction = 1,
+  staticScene = false,
+}: Omit<IntroStorySceneViewProps, "scene">) {
+  const isPresent = useIsPresent();
+  const current = staticScene || isPresent;
+
   return (
-    <div
-      className={`hero-brand-stage intro-story-scene is-${status}`}
+    <motion.div
+      className="hero-brand-stage intro-story-scene"
       data-intro-current={current ? "true" : undefined}
       aria-hidden={!current}
-      onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget) onAnimationEnd?.();
-      }}
+      custom={direction}
+      variants={storySceneVariants}
+      initial={staticScene ? false : "enter"}
+      animate={staticScene ? undefined : "center"}
+      exit={staticScene ? undefined : "exit"}
     >
       <div className="hero-brand-content">
         <BrandLockup className="hero-brand-lockup" />
@@ -738,66 +470,96 @@ function IntroHeroScene({
       </div>
       <p className="hero-scroll-cue">
         <span>스크롤하여 줄바꿈 비교</span>
-        <span aria-hidden="true">↓</span>
+        <motion.span
+          animate={staticScene ? undefined : { opacity: [0.35, 1, 0.35], y: [0, 6, 0] }}
+          transition={{ duration: 1.8, ease: easeOutQuint, repeat: Infinity }}
+          aria-hidden="true"
+        >
+          ↓
+        </motion.span>
       </p>
-    </div>
+    </motion.div>
   );
 }
 
 function IntroMessageScene({
-  current,
-  status,
-  onAnimationEnd,
-}: Omit<IntroStorySceneViewProps, "scene" | "flipRectsRef">) {
+  direction = 1,
+  messagePhase = "blank",
+  shimmerActive = false,
+  staticScene = false,
+}: Omit<IntroStorySceneViewProps, "scene">) {
+  const isPresent = useIsPresent();
+  const current = staticScene || isPresent;
+  const resolvedPhase = staticScene ? "complete" : messagePhase;
+  const sourceVisible = resolvedPhase === "source" || resolvedPhase === "complete";
+  const highlightVisible = resolvedPhase === "complete";
+
   return (
-    <div
-      className={`intro-message-stage intro-story-scene is-${status}`}
+    <motion.div
+      className="intro-message-stage intro-story-scene"
       data-intro-current={current ? "true" : undefined}
       aria-hidden={!current}
-      onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget) onAnimationEnd?.();
-      }}
+      custom={direction}
+      variants={storySceneVariants}
+      initial={staticScene ? false : "enter"}
+      animate={staticScene ? undefined : "center"}
+      exit={staticScene ? undefined : "exit"}
     >
       <p className="intro-message-copy" aria-label="줄바꿈을 자연스럽게">
-        <span className="intro-message-source">줄바꿈을</span>
-        <span className="intro-message-highlight">
-          <span className="text-shimmer-target">
-            자연스럽게
-            <TextShimmer>자연스럽게</TextShimmer>
-          </span>
-        </span>
+        <motion.span
+          className="intro-message-source"
+          initial={false}
+          animate={sourceVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
+          transition={{ duration: 0.52, ease: easeOutExpo }}
+        >
+          줄바꿈을
+        </motion.span>
+        <motion.span
+          className="intro-message-highlight"
+          initial={false}
+          animate={highlightVisible ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 }}
+          transition={{ duration: 0.56, ease: easeOutExpo }}
+        >
+          <TextShimmer active={shimmerActive}>자연스럽게</TextShimmer>
+        </motion.span>
       </p>
-    </div>
+    </motion.div>
   );
 }
 
 function IntroHeadlineScene({
-  current,
+  direction = 1,
   scene,
-  status,
-  flipRectsRef,
-  onAnimationEnd,
+  shimmerActive = false,
+  staticScene = false,
   onLayoutSettled,
   sceneStepIndex,
 }: IntroStorySceneViewProps & {
   scene: Extract<IntroStoryScene, { kind: "headline" }>;
 }) {
   const example = lineBreakExamples[scene.exampleIndex] ?? lineBreakExamples[0];
+  const isPresent = useIsPresent();
+  const current = staticScene || isPresent;
   if (!example) return null;
 
   return (
-    <div
-      className={`line-break-composition page-width intro-story-scene is-${status}`}
+    <motion.div
+      className="line-break-composition page-width intro-story-scene"
       data-intro-current={current ? "true" : undefined}
       data-semantic={scene.semantic ? "true" : "false"}
       aria-hidden={!current}
-      onAnimationEnd={(event) => {
-        if (event.target === event.currentTarget) onAnimationEnd?.();
-      }}
+      custom={direction}
+      variants={storySceneVariants}
+      initial={staticScene ? false : "enter"}
+      animate={staticScene ? undefined : "center"}
+      exit={staticScene ? undefined : "exit"}
     >
-      <div
+      <motion.div
         className="line-break-scene-context"
         key={`${example.id}-${scene.semantic ? "semantic" : "native"}`}
+        initial={staticScene ? false : { opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.38, ease: easeOutExpo }}
       >
         <div className="line-break-scene-state">
           <p
@@ -816,15 +578,16 @@ function IntroHeadlineScene({
         <p className="line-break-scene-description">
           {scene.semantic ? example.semanticDescription : example.nativeDescription}
         </p>
-      </div>
+      </motion.div>
       <LineBreakHeadline
         example={example}
         semantic={scene.semantic}
-        flipRectsRef={current ? flipRectsRef : undefined}
+        shimmerActive={shimmerActive}
+        staticScene={staticScene}
         sceneStepIndex={sceneStepIndex}
         onLayoutSettled={onLayoutSettled}
       />
-    </div>
+    </motion.div>
   );
 }
 
@@ -834,29 +597,28 @@ function IntroStorySceneView(props: IntroStorySceneViewProps) {
   return <IntroHeadlineScene {...props} scene={props.scene} />;
 }
 
+function introStorySceneKey(scene: IntroStoryScene) {
+  return scene.kind === "headline" ? `headline-${scene.exampleIndex}` : scene.kind;
+}
+
 function IntroStory() {
   const storyRef = useRef<HTMLElement>(null);
-  const flipRectsRef = useRef(new Map<string, DOMRect>());
-  const reducedMotion = useReducedMotion();
-  const { clearPrevious, markShimmerLayoutSettled, storyState } = useIntroStoryState(
-    storyRef,
-    flipRectsRef,
-  );
-  const currentScene = getIntroStoryScene(storyState.stepIndex);
+  const { markLayoutSettled, playback, shouldReduceMotion } = useIntroStoryMotion(storyRef);
+  const currentScene = getIntroStoryScene(playback.stepIndex);
 
-  if (reducedMotion) {
+  if (shouldReduceMotion) {
     return (
       <section className="intro-story is-static" id="top" ref={storyRef}>
         <span className="hero-brand-visibility-sentinel" aria-hidden="true" />
-        <IntroStorySceneView current scene={{ kind: "hero" }} status="current" />
-        <IntroStorySceneView current scene={{ kind: "message" }} status="current" />
+        <IntroStorySceneView scene={{ kind: "hero" }} staticScene />
+        <IntroStorySceneView scene={{ kind: "message" }} staticScene />
         {lineBreakExamples.flatMap((example, exampleIndex) =>
           [false, true].map((semantic) => (
             <IntroStorySceneView
-              current
               key={`${example.id}-${semantic ? "semantic" : "native"}`}
               scene={{ kind: "headline", exampleIndex, semantic }}
-              status="current"
+              shimmerActive={false}
+              staticScene
             />
           )),
         )}
@@ -870,30 +632,33 @@ function IntroStory() {
       id="top"
       aria-label="브라우저 기본 줄바꿈과 semantic-wrap 비교"
       ref={storyRef}
+      data-intro-message-phase={playback.messagePhase ?? undefined}
+      data-shimmer-active={playback.shimmerActive ? "true" : undefined}
       style={{ minHeight: `${(introStoryTimelineUnits + 1) * 100}svh` }}
     >
       <span className="hero-brand-visibility-sentinel" aria-hidden="true" />
-      <div className="intro-story-pin">
+      <motion.div className="intro-story-pin" layoutRoot>
         <h1 className="visually-hidden">semantic-wrap</h1>
         <div
           className="intro-story-stack"
-          data-direction={storyState.direction === 1 ? "forward" : "backward"}
+          data-direction={playback.direction === 1 ? "forward" : "backward"}
           aria-live="polite"
         >
-          {storyState.previous ? (
-            <IntroStorySceneView scene={storyState.previous} status="outgoing" />
-          ) : null}
-          <IntroStorySceneView
-            current
-            scene={currentScene}
-            sceneStepIndex={storyState.stepIndex}
-            status={storyState.previous ? "incoming" : "current"}
-            flipRectsRef={flipRectsRef}
-            onAnimationEnd={clearPrevious}
-            onLayoutSettled={markShimmerLayoutSettled}
-          />
+          <LayoutGroup id="intro-story-headline">
+            <AnimatePresence initial={false} custom={playback.direction} mode="sync">
+              <IntroStorySceneView
+                direction={playback.direction}
+                key={introStorySceneKey(currentScene)}
+                messagePhase={playback.messagePhase}
+                scene={currentScene}
+                sceneStepIndex={playback.stepIndex}
+                shimmerActive={playback.shimmerActive}
+                onLayoutSettled={markLayoutSettled}
+              />
+            </AnimatePresence>
+          </LayoutGroup>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }
@@ -957,9 +722,9 @@ function Playground() {
       aria-labelledby="playground-title"
     >
       <div className="page-width">
-        <div className="playground-intro">
+        <motion.div className="playground-intro" {...viewReveal}>
           <h2 id="playground-title">Playground</h2>
-        </div>
+        </motion.div>
 
         <div className={`measure-instrument${measureDragging ? " is-dragging" : ""}`}>
           <div className="headline-presets" role="group" aria-label="예시 제목 선택">
@@ -1170,6 +935,7 @@ function ProcessLayoutOptions({
   diagnostics: LineBreakDiagnostics | null;
 }) {
   const layouts = getProcessLayoutEntries(diagnostics);
+  const shouldReduceMotion = Boolean(usePrefersReducedMotion());
 
   if (layouts.length === 0) {
     return <p className="process-diagnostics-loading">현재 글꼴과 너비를 측정하고 있습니다…</p>;
@@ -1177,15 +943,23 @@ function ProcessLayoutOptions({
 
   return (
     <div
-      className="process-layout-options is-measuring"
+      className="process-layout-options"
       aria-label="실제로 측정한 레이아웃 후보"
     >
       {layouts.map((entry, index) => {
         return (
-          <article
+          <motion.article
             className="process-layout-option"
             key={`${entry.source}-${entry.id}`}
-            style={{ "--layout-index": index } as CSSProperties}
+            animate={shouldReduceMotion
+              ? undefined
+              : { borderColor: ["#3a4250", "rgb(144 189 249 / 72%)", "#3a4250"] }}
+            transition={{
+              delay: index * 0.18,
+              duration: 1.8,
+              ease: easeOutExpo,
+              repeat: Infinity,
+            }}
           >
             <span className="process-layout-id">{entry.id}</span>
             <p lang="ko">
@@ -1200,7 +974,7 @@ function ProcessLayoutOptions({
               <span>균형 비용 {entry.layout.balanceScore.toFixed(2)}</span>
               <span>의미 비용 {entry.layout.modelCost.toFixed(2)}</span>
             </span>
-          </article>
+          </motion.article>
         );
       })}
     </div>
@@ -1267,97 +1041,84 @@ function ProcessStage({ activeStep }: { activeStep: number }) {
       ];
 
   return (
-    <aside className="process-stage" id="process-stage" aria-label="작동 방식 실시간 미리보기">
+    <motion.aside
+      className="process-stage"
+      id="process-stage"
+      aria-label="작동 방식 실시간 미리보기"
+      {...viewReveal}
+    >
       <div className="process-stage-head">
         <strong>0{activeStep + 1} / 03</strong>
       </div>
-      <div className={`process-stage-scene is-step-${activeStep + 1}`} key={activeStep}>
-        <p
-          className="process-measure-source"
-          ref={ref}
-          aria-hidden="true"
-          lang="ko"
-          style={{ "--process-measure-width": `${processMeasureWidth}px` } as CSSProperties}
+      <p
+        className="process-measure-source"
+        ref={ref}
+        aria-hidden="true"
+        lang="ko"
+        style={{ "--process-measure-width": `${processMeasureWidth}px` } as CSSProperties}
+      >
+        {processExampleText}
+      </p>
+      <AnimatePresence initial={false} mode="sync">
+        <motion.div
+          className={`process-stage-scene is-step-${activeStep + 1}`}
+          key={activeStep}
+          initial={{ opacity: 0, scale: 0.985, y: 16 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.99, y: -10 }}
+          transition={{ duration: 0.38, ease: easeOutExpo }}
         >
-          {processExampleText}
-        </p>
-        {activeStep === 0 ? (
-          currentDiagnostics
-            ? <ProcessCandidates candidates={currentDiagnostics.candidates} />
-            : <p className="process-diagnostics-loading">실제 후보를 계산하고 있습니다…</p>
-        ) : null}
-        {activeStep === 1 ? (
-          <ProcessLayoutOptions diagnostics={currentDiagnostics} />
-        ) : null}
-        {activeStep === 2 ? (
-          <ProcessSelectionComparison
-            diagnostics={currentDiagnostics}
-            selection={currentSelection}
-          />
-        ) : null}
-      </div>
+          {activeStep === 0 ? (
+            currentDiagnostics
+              ? <ProcessCandidates candidates={currentDiagnostics.candidates} />
+              : <p className="process-diagnostics-loading">실제 후보를 계산하고 있습니다…</p>
+          ) : null}
+          {activeStep === 1 ? (
+            <ProcessLayoutOptions diagnostics={currentDiagnostics} />
+          ) : null}
+          {activeStep === 2 ? (
+            <ProcessSelectionComparison
+              diagnostics={currentDiagnostics}
+              selection={currentSelection}
+            />
+          ) : null}
+        </motion.div>
+      </AnimatePresence>
       <p className="process-stage-status" aria-live="polite">
         <span aria-hidden="true" />
         {processStageStatus[activeStep]}
       </p>
-    </aside>
+    </motion.aside>
   );
 }
 
 function ProcessSection() {
   const listRef = useRef<HTMLOListElement>(null);
   const [activeStep, setActiveStep] = useState(0);
+  const { scrollYProgress } = useScroll({
+    target: listRef,
+    offset: ["start center", "end center"],
+  });
 
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return undefined;
-
-    const items = Array.from(list.querySelectorAll<HTMLElement>("[data-process-step]"));
-    let animationFrame = 0;
-    const syncActiveStep = () => {
-      animationFrame = 0;
-      const readingLine = window.innerHeight * 0.46;
-      let nextStep = 0;
-      let nearestDistance = Number.POSITIVE_INFINITY;
-
-      for (const [index, item] of items.entries()) {
-        const bounds = item.getBoundingClientRect();
-        const distance = Math.abs(bounds.top + bounds.height / 2 - readingLine);
-        if (distance < nearestDistance) {
-          nextStep = index;
-          nearestDistance = distance;
-        }
-      }
-
-      setActiveStep((current) => current === nextStep ? current : nextStep);
-    };
-    const scheduleActiveStepSync = () => {
-      if (animationFrame !== 0) return;
-      animationFrame = window.requestAnimationFrame(syncActiveStep);
-    };
-
-    window.addEventListener("scroll", scheduleActiveStepSync, { passive: true });
-    window.addEventListener("resize", scheduleActiveStepSync);
-    syncActiveStep();
-
-    return () => {
-      window.removeEventListener("scroll", scheduleActiveStepSync);
-      window.removeEventListener("resize", scheduleActiveStepSync);
-      if (animationFrame !== 0) window.cancelAnimationFrame(animationFrame);
-    };
-  }, []);
+  useMotionValueEvent(scrollYProgress, "change", (progress) => {
+    const nextStep = Math.min(
+      processSteps.length - 1,
+      Math.max(0, Math.round(progress * (processSteps.length - 1))),
+    );
+    setActiveStep((current) => current === nextStep ? current : nextStep);
+  });
 
   return (
     <section className="process-section" id="process" aria-labelledby="process-title">
       <div className="page-width">
-        <div className="section-intro">
+        <motion.div className="section-intro" {...viewReveal}>
           <KoreanSemanticWrap>
             <h2 id="process-title">모델이 제안하고, 브라우저가 검증합니다.</h2>
           </KoreanSemanticWrap>
           <KoreanSemanticWrap>
             <p>모델이 찾은 의미 경계와 실제 렌더링 너비를 함께 비교해, 바꿀 가치가 있는 줄바꿈만 적용합니다.</p>
           </KoreanSemanticWrap>
-        </div>
+        </motion.div>
 
         <div className="process-workbench">
           <ProcessStage activeStep={activeStep} />
