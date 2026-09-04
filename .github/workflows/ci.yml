@@ -22,7 +22,7 @@ jobs:
           bun-version: 1.4.0
       - run: bun install --frozen-lockfile
       - name: Require a Changeset for package-facing changes
-        if: github.event_name == 'pull_request'
+        if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/') }}
         env:
           GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: bun run release:guard
