@@ -61,24 +61,25 @@ plan.calculate({ maxWidth, measureText });
 plan.select({ maxWidth, measureText, nativeLayout });`;
 
 const modelCode = `import {
+  createBudouxPredictor,
+  definePhraseModel,
   selectLineBreaks,
-  type PhraseModel,
 } from "@semantic-wrap/core";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const colonTitleModel: PhraseModel = {
+const colonTitleModel = definePhraseModel({
   boundaryMode: "spaces",
   levels: [
     {
       name: "after-colon",
-      model: { UW3: { ":": 100 } },
+      predictor: createBudouxPredictor({ UW3: { ":": 100 } }),
       penalty: 0,
     },
   ],
   fallbackPenalty: 1,
-};
+});
 
 const result = selectLineBreaks({
   text: "서비스 업데이트: 새로운 기능을 사용하는 방법",
@@ -89,6 +90,23 @@ const result = selectLineBreaks({
 
 console.log(result.lines);
 // ["서비스 업데이트:", "새로운 기능을 사용하는 방법"]`;
+
+const predictorCode = `import { definePhraseModel } from "@semantic-wrap/core";
+
+const editorialModel = definePhraseModel({
+  boundaryMode: "spaces",
+  levels: [
+    {
+      name: "after-colon",
+      predictor: {
+        predict: (text) =>
+          [...text.matchAll(/:\\s/gu)].map((match) => match.index + 1),
+      },
+      penalty: 0,
+    },
+  ],
+  fallbackPenalty: 1,
+});`;
 
 const strategyCode = `import {
   balance,
@@ -248,22 +266,23 @@ console.log(result.lines);
 // ["Write clear headlines", "for readers, not for reviewers"]`;
 
 const englishModelCode = `import {
+  createBudouxPredictor,
+  definePhraseModel,
   selectLineBreaks,
-  type PhraseModel,
 } from "@semantic-wrap/core";
 
 const canvasContext = document.createElement("canvas").getContext("2d")!;
 canvasContext.font = "700 28px system-ui";
 
-const colonTitleModel: PhraseModel = {
+const colonTitleModel = definePhraseModel({
   boundaryMode: "spaces",
   levels: [{
     name: "after-colon",
-    model: { UW3: { ":": 100 } },
+    predictor: createBudouxPredictor({ UW3: { ":": 100 } }),
     penalty: 0,
   }],
   fallbackPenalty: 1,
-};
+});
 
 const result = selectLineBreaks({
   text: "Design review checklist: what to ask before approval",
@@ -899,18 +918,22 @@ function IntroductionArticle() {
       </DocsSection>
 
       <DocsSection id="custom-models" index="Core 03" title="커스텀 모델">
-        <p><code>PhraseModel</code> 인터페이스를 만족하는 모델이라면 어떤 모델이든 사용할 수 있습니다. 별도로 학습한 모델이나 여러 단계의 모델 예측을 함께 사용할 수 있습니다.</p>
+        <p><code>PhraseModel</code>의 각 level에는 의미 경계를 반환하는 동기식 <code>predictor</code>를 넣습니다. 여러 level의 예측도 함께 집계할 수 있습니다.</p>
         <DocsTable><table>
           <caption>PhraseModel 필드</caption>
           <thead><tr><th>필드</th><th>필수</th><th>기본값</th><th>설명</th></tr></thead>
           <tbody>
-            <tr><td><code>levels</code></td><td>예</td><td>—</td><td>모델과 penalty를 담은 하나 이상의 단계</td></tr>
+            <tr><td><code>levels</code></td><td>예</td><td>—</td><td>predictor와 penalty를 담은 하나 이상의 단계</td></tr>
             <tr><td><code>fallbackPenalty</code></td><td>예</td><td>—</td><td>어떤 단계도 찾지 않은 일반 경계의 비용</td></tr>
             <tr><td><code>boundaryMode</code></td><td>아니요</td><td><code>spaces</code></td><td>공백 또는 Unicode grapheme 경계를 사용하며 인접 공백은 하나로 통합</td></tr>
           </tbody>
         </table></DocsTable>
-        <p>각 level의 <code>penalty</code>는 해당 모델이 예측한 경계의 비용입니다. 낮을수록 우선하며 여러 level이 같은 경계를 예측하면 기본 aggregate 단계는 가장 낮은 값을 사용합니다.</p>
+        <p>각 level의 <code>penalty</code>는 해당 predictor가 예측한 경계의 비용입니다. 낮을수록 우선하며 여러 level이 같은 경계를 예측하면 기본 aggregate 단계는 가장 낮은 값을 사용합니다.</p>
         <CodeBlock label="colon-model.ts" language="ts">{modelCode}</CodeBlock>
+        <p><code>definePhraseModel</code>은 모델 설정을 검증하고 동결합니다. <code>createBudouxPredictor</code>는 BudouX 가중치를 공통 predictor 계약으로 변환합니다.</p>
+        <h3>직접 predictor 작성하기</h3>
+        <p><code>BoundaryPredictor</code>는 문자열 내부의 UTF-16 source offset을 오름차순으로 반환합니다. 반환된 예측은 <code>boundaryMode</code>가 허용하는 실제 줄바꿈 위치로 제한됩니다.</p>
+        <CodeBlock label="editorial-model.ts" language="ts">{predictorCode}</CodeBlock>
         <p><code>UW3</code>는 후보 바로 앞 한 글자를 나타내는 BudouX feature입니다. 예시의 100은 확률이 아니라 경계를 판정할 때 사용하는 가중치입니다. 실제 서비스에서는 충분한 데이터로 학습하고 검증한 모델을 사용하세요.</p>
       </DocsSection>
 
@@ -1147,18 +1170,22 @@ function EnglishIntroductionArticle() {
       </DocsSection>
 
       <DocsSection id="custom-models" index="Core 03" locale="en" title="Custom phrase models">
-        <p>Any model that implements <code>PhraseModel</code> can replace the preset. Multiple model levels can also be aggregated together.</p>
+        <p>Each <code>PhraseModel</code> level provides one synchronous <code>predictor</code>. Predictions from multiple levels can be aggregated together.</p>
         <DocsTable><table>
           <caption>PhraseModel fields</caption>
           <thead><tr><th>Field</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>levels</code></td><td>yes</td><td>—</td><td>One or more models and their relative penalties</td></tr>
+            <tr><td><code>levels</code></td><td>yes</td><td>—</td><td>One or more predictors and their relative penalties</td></tr>
             <tr><td><code>fallbackPenalty</code></td><td>yes</td><td>—</td><td>Cost of an allowed boundary not predicted by a level</td></tr>
             <tr><td><code>boundaryMode</code></td><td>no</td><td><code>spaces</code></td><td>Whitespace or Unicode grapheme boundaries</td></tr>
           </tbody>
         </table></DocsTable>
         <p>Lower penalties are preferred. When multiple levels predict the same boundary, the default aggregation stage keeps the lowest penalty.</p>
         <CodeBlock label="colon-model.ts" language="ts" locale="en">{englishModelCode}</CodeBlock>
+        <p><code>definePhraseModel</code> validates and freezes model configuration. <code>createBudouxPredictor</code> adapts BudouX weights to the generic predictor contract.</p>
+        <h3>Implement a predictor</h3>
+        <p>A <code>BoundaryPredictor</code> returns strictly ascending UTF-16 source offsets inside the text. The configured <code>boundaryMode</code> filters them to valid wrap positions.</p>
+        <CodeBlock label="editorial-model.ts" language="ts" locale="en">{predictorCode}</CodeBlock>
         <p><code>UW3</code> is the BudouX feature for the character immediately before a boundary. The value <code>100</code> is a feature weight, not a probability.</p>
       </DocsSection>
 

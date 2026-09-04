@@ -1,15 +1,113 @@
 import { describe, expect, test } from "bun:test";
-import { consensus, createLineBreakStrategy, selectLineBreaks } from "../src/index.js";
+import {
+  consensus,
+  createBudouxPredictor,
+  createLineBreakStrategy,
+  definePhraseModel,
+  selectLineBreaks,
+} from "../src/index.js";
 
 const measureText = (text: string) => text.length;
 
 describe("candidate aggregation", () => {
+  test("accepts a custom synchronous boundary predictor", () => {
+    const calls: string[] = [];
+    const predictor = {
+      predict(text: string) {
+        calls.push(text);
+        return [3];
+      },
+    };
+    const model = definePhraseModel({
+      boundaryMode: "spaces",
+      levels: [
+        {
+          name: "custom",
+          predictor,
+          penalty: 0,
+        },
+      ],
+      fallbackPenalty: 1,
+    });
+    const result = selectLineBreaks(
+      { text: "one two three", model, maxWidth: 100, measureText },
+      { diagnostics: true },
+    );
+
+    expect(calls).toEqual(["one two three"]);
+    expect(result.diagnostics.predictions).toEqual([
+      { offset: 3, level: 0, name: "custom", penalty: 0 },
+    ]);
+    expect(Object.isFrozen(model)).toBe(true);
+    expect(Object.isFrozen(model.levels)).toBe(true);
+    expect(Object.isFrozen(model.levels[0])).toBe(true);
+    expect(Object.isFrozen(predictor)).toBe(false);
+  });
+
+  test("wraps existing BudouX weights in the predictor contract", () => {
+    const predictor = createBudouxPredictor({ UW3: { e: 100 } });
+    expect(predictor.predict("one two")).toContain(3);
+  });
+
+  test("validates custom predictor definitions and returned offsets", () => {
+    expect(() => definePhraseModel({
+      levels: [{ predictor: {} as never, penalty: 0 }],
+      fallbackPenalty: 1,
+    })).toThrow("predict function");
+
+    expect(() => selectLineBreaks({
+      text: "one two",
+      model: {
+        levels: [{ model: {}, penalty: 0 }],
+        fallbackPenalty: 1,
+      } as never,
+      maxWidth: 100,
+      measureText,
+    })).toThrow("predict function");
+
+    for (const offsets of [[0], [2, 2], [2.5], [100]]) {
+      const model = {
+        boundaryMode: "spaces",
+        levels: [{ predictor: { predict: () => offsets }, penalty: 0 }],
+        fallbackPenalty: 1,
+      } as const;
+      expect(() => selectLineBreaks({
+        text: "one two",
+        model,
+        maxWidth: 100,
+        measureText,
+      })).toThrow("ascending UTF-16 source offsets");
+    }
+  });
+
+  test("filters custom predictions through the model boundary mode", () => {
+    const model = definePhraseModel({
+      boundaryMode: "spaces",
+      levels: [{ predictor: { predict: () => [1, 3] }, penalty: 0 }],
+      fallbackPenalty: 1,
+    });
+    const result = selectLineBreaks(
+      { text: "one two", model, maxWidth: 100, measureText },
+      { diagnostics: true },
+    );
+
+    expect(result.diagnostics.predictions.map(({ offset }) => offset)).toEqual([3]);
+  });
+
   test("keeps every raw prediction in diagnostics and the lowest penalty per boundary", () => {
     const model = {
       boundaryMode: "spaces",
       levels: [
-        { name: "coarse", model: { UW3: { 나: 100 } }, penalty: 0 },
-        { name: "fine", model: { UW3: { 둘: 100 } }, penalty: 0.4 },
+        {
+          name: "coarse",
+          predictor: createBudouxPredictor({ UW3: { 나: 100 } }),
+          penalty: 0,
+        },
+        {
+          name: "fine",
+          predictor: createBudouxPredictor({ UW3: { 둘: 100 } }),
+          penalty: 0.4,
+        },
       ],
       fallbackPenalty: 1,
     } as const;
@@ -33,8 +131,16 @@ describe("candidate aggregation", () => {
     const model = {
       boundaryMode: "spaces",
       levels: [
-        { name: "one", model: { UW3: { 나: 100 } }, penalty: 0 },
-        { name: "two", model: { UW3: { 나: 100 } }, penalty: 0.2 },
+        {
+          name: "one",
+          predictor: createBudouxPredictor({ UW3: { 나: 100 } }),
+          penalty: 0,
+        },
+        {
+          name: "two",
+          predictor: createBudouxPredictor({ UW3: { 나: 100 } }),
+          penalty: 0.2,
+        },
       ],
       fallbackPenalty: 1,
     } as const;
@@ -55,7 +161,7 @@ describe("candidate aggregation", () => {
   test("collapses internal whitespace runs and excludes leading and trailing whitespace", () => {
     const model = {
       boundaryMode: "spaces",
-      levels: [{ model: {}, penalty: 0 }],
+      levels: [{ predictor: createBudouxPredictor({}), penalty: 0 }],
       fallbackPenalty: 1,
     } as const;
     const cases = [
@@ -79,7 +185,7 @@ describe("candidate aggregation", () => {
   test("uses grapheme boundaries for character mode", () => {
     const model = {
       boundaryMode: "characters",
-      levels: [{ model: {}, penalty: 0 }],
+      levels: [{ predictor: createBudouxPredictor({}), penalty: 0 }],
       fallbackPenalty: 1,
     } as const;
     const result = selectLineBreaks(
@@ -109,7 +215,11 @@ describe("candidate aggregation", () => {
 
     const afterWhitespaceModel = {
       boundaryMode: "characters",
-      levels: [{ name: "after-space", model: { UW3: { " ": 100 } }, penalty: 0 }],
+      levels: [{
+        name: "after-space",
+        predictor: createBudouxPredictor({ UW3: { " ": 100 } }),
+        penalty: 0,
+      }],
       fallbackPenalty: 1,
     } as const;
     const normalizedPrediction = selectLineBreaks(
@@ -124,7 +234,7 @@ describe("candidate aggregation", () => {
   test("preserves whitespace that is not replaced by a selected break", () => {
     const model = {
       boundaryMode: "spaces",
-      levels: [{ model: {}, penalty: 0 }],
+      levels: [{ predictor: createBudouxPredictor({}), penalty: 0 }],
       fallbackPenalty: 1,
     } as const;
     const result = selectLineBreaks({
@@ -138,20 +248,9 @@ describe("candidate aggregation", () => {
   });
 
   test("rejects non-finite BudouX model weights", () => {
-    const invalidModel = {
-      boundaryMode: "spaces",
-      levels: [{ model: { UW3: { 나: Number.NaN } }, penalty: 0 }],
-      fallbackPenalty: 1,
-    } as const;
-
-    expect(() =>
-      selectLineBreaks({
-        text: "하나 둘",
-        model: invalidModel,
-        maxWidth: 100,
-        measureText,
-      }),
-    ).toThrow("must be finite");
+    expect(() => createBudouxPredictor({ UW3: { 나: Number.NaN } })).toThrow(
+      "must be finite",
+    );
   });
 
   test("rejects malformed phrase models with clear errors", () => {
@@ -165,7 +264,7 @@ describe("candidate aggregation", () => {
     ).toThrow("Phrase model must be an object");
 
     const invalidName = {
-      levels: [{ name: 1, model: {}, penalty: 0 }],
+      levels: [{ name: 1, predictor: createBudouxPredictor({}), penalty: 0 }],
       fallbackPenalty: 1,
     };
     expect(() =>
@@ -181,7 +280,7 @@ describe("candidate aggregation", () => {
   test("rejects aggregated candidates outside the model's allowed offsets", () => {
     const model = {
       boundaryMode: "spaces",
-      levels: [{ model: {}, penalty: 0 }],
+      levels: [{ predictor: createBudouxPredictor({}), penalty: 0 }],
       fallbackPenalty: 1,
     } as const;
     const strategy = createLineBreakStrategy({

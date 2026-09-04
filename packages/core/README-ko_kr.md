@@ -51,6 +51,32 @@ const selection = plan.select({ maxWidth, measureText, nativeLayout });
 뒤 단계를 바로 호출하면 필요한 앞 단계를 자동 실행합니다. 예측과 집계는 immutable
 snapshot으로 캐시하고, 계산과 선택은 measurement마다 다시 실행합니다.
 
+## Phrase model과 predictor
+
+각 `PhraseModel` level에는 동기식 `predictor`를 넣습니다. `definePhraseModel`은 재사용할
+설정을 검증하고 동결하며, `createBudouxPredictor`는 BudouX 가중치를 공통 predictor
+계약으로 변환합니다.
+
+```ts
+import {
+  createBudouxPredictor,
+  definePhraseModel,
+} from "@semantic-wrap/core";
+
+const colonModel = definePhraseModel({
+  boundaryMode: "spaces",
+  levels: [{
+    name: "after-colon",
+    predictor: createBudouxPredictor({ UW3: { ":": 100 } }),
+    penalty: 0,
+  }],
+  fallbackPenalty: 1,
+});
+```
+
+Custom `BoundaryPredictor`는 문자열 내부의 UTF-16 source offset을 오름차순으로
+반환합니다. Core는 후보를 만들기 전에 `boundaryMode`가 허용하는 위치만 남깁니다.
+
 ```ts
 import {
   consensus,
@@ -80,10 +106,12 @@ layout이 있으면 `balance()`는 줄 수가 같고 모델 비용이 더 낮은
 - `selectLineBreaks`
 - `createLineBreakPlan`
 - `createLineBreakStrategy`
+- `definePhraseModel`
+- `createBudouxPredictor`
 - `lowestPenalty`, `consensus`
 - `optimalLayouts`, `greedy`
 - `balance`
-- strategy와 phrase model을 구성하는 public types
+- `BoundaryPredictor`와 strategy, layout, phrase model을 구성하는 public types
 
 ## 라이선스
 

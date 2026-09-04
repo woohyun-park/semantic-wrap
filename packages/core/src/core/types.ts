@@ -1,11 +1,18 @@
 export type BudouxModel = Record<string, Record<string, number>>;
 
+/** Synchronously predicts UTF-16 offsets that may be considered semantic boundaries. */
+export interface BoundaryPredictor {
+  readonly predict: (text: string) => readonly number[];
+}
+
+/** One semantic boundary source and its relative selection cost. */
 export interface PhraseModelLevel {
   /** Optional diagnostic label, such as `coarse` or `fine`. */
-  name?: string;
-  model: BudouxModel;
+  readonly name?: string;
+  /** Implementation that proposes semantic boundary offsets. */
+  readonly predictor: BoundaryPredictor;
   /** Relative cost of breaking at a boundary predicted by this level. */
-  penalty: number;
+  readonly penalty: number;
 }
 
 export interface PhraseModel {

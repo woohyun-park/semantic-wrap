@@ -2,17 +2,25 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { selectLineBreaks } from "@semantic-wrap/core";
 import { koTitleModel } from "../src/index.js";
+import {
+  koreanTitleCoarseModel,
+  koreanTitleFineModel,
+  koreanTitleMediumModel,
+} from "../src/models.js";
 
 describe("Korean title model", () => {
-  test("ships only the frozen cumulative coarse, medium, and fine weights", () => {
+  test("adapts the exact cumulative weights into frozen predictor levels", () => {
+    expect(Object.isFrozen(koTitleModel)).toBe(true);
+    expect(Object.isFrozen(koTitleModel.levels)).toBe(true);
+    expect(koTitleModel.levels.every(({ predictor }) => Object.isFrozen(predictor))).toBe(true);
     expect(koTitleModel.levels.map(({ name, penalty }) => ({ name, penalty }))).toEqual([
       { name: "coarse", penalty: 0 },
       { name: "medium", penalty: 0.35 },
       { name: "fine", penalty: 0.7 },
     ]);
     expect(
-      koTitleModel.levels.map(({ model }) =>
-        createHash("sha256").update(JSON.stringify(model)).digest("hex"),
+      [koreanTitleCoarseModel, koreanTitleMediumModel, koreanTitleFineModel].map((weights) =>
+        createHash("sha256").update(JSON.stringify(weights)).digest("hex"),
       ),
     ).toEqual([
       "7c8e0102945002aa4cea946d8afb71295d10810315cc61ea63679ac224fc93a2",

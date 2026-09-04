@@ -50,6 +50,32 @@ const selection = plan.select({ maxWidth, measureText, nativeLayout });
 Calling a later method runs its prerequisites automatically. Prediction and aggregation are
 cached as immutable snapshots; calculation and selection run for each measurement.
 
+## Phrase models and predictors
+
+Each `PhraseModel` level provides one synchronous `predictor`. `definePhraseModel` validates
+and freezes reusable configuration, while `createBudouxPredictor` adapts BudouX weights to
+the generic predictor contract.
+
+```ts
+import {
+  createBudouxPredictor,
+  definePhraseModel,
+} from "@semantic-wrap/core";
+
+const colonModel = definePhraseModel({
+  boundaryMode: "spaces",
+  levels: [{
+    name: "after-colon",
+    predictor: createBudouxPredictor({ UW3: { ":": 100 } }),
+    penalty: 0,
+  }],
+  fallbackPenalty: 1,
+});
+```
+
+A custom `BoundaryPredictor` returns strictly ascending UTF-16 source offsets inside the
+text. Core filters them through the model's `boundaryMode` before creating candidates.
+
 ## Strategy
 
 The strategy exposes three replaceable stages:
@@ -91,10 +117,12 @@ calculated layout; without a native layout, Core selects among calculated layout
 - `selectLineBreaks`
 - `createLineBreakPlan`
 - `createLineBreakStrategy`
+- `definePhraseModel`
+- `createBudouxPredictor`
 - `lowestPenalty`, `consensus`
 - `optimalLayouts`, `greedy`
 - `balance`
-- Public types for strategies, layouts, and phrase models
+- `BoundaryPredictor` and public types for strategies, layouts, and phrase models
 
 ## License
 

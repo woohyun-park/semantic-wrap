@@ -2,11 +2,14 @@ export { consensus, lowestPenalty } from "./core/aggregators.js";
 export { greedy, optimalLayouts } from "./core/calculators.js";
 export { balance } from "./core/selectors.js";
 export { createLineBreakPlan } from "./core/line-break-plan.js";
+export { definePhraseModel } from "./core/phrase-model.js";
+export { createBudouxPredictor } from "./core/predictors.js";
 export { selectLineBreaks } from "./core/select-line-breaks.js";
 export { createLineBreakStrategy } from "./core/strategy.js";
 export type {
   BaselineLayout,
   BalanceOptions,
+  BoundaryPredictor,
   BreakCandidate,
   BreakPrediction,
   BudouxModel,

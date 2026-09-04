@@ -1,4 +1,4 @@
-import { BudouxParser } from "./budoux-parser.js";
+import { validatePhraseModel } from "./phrase-model.js";
 import type { BreakPrediction, PhraseModel } from "./types.js";
 
 function spaceOffsets(text: string): number[] {
@@ -43,52 +43,26 @@ function characterOffsets(text: string): number[] {
   return [...offsets].sort((left, right) => left - right);
 }
 
-function validateBudouxModel(model: unknown, levelIndex: number): void {
-  if (typeof model !== "object" || model === null || Array.isArray(model)) {
-    throw new Error(`Phrase model level ${levelIndex} weights must be an object`);
-  }
-  for (const [group, values] of Object.entries(model)) {
-    if (typeof values !== "object" || values === null || Array.isArray(values)) {
-      throw new Error(`Phrase model weight group ${group} must be an object`);
-    }
-    for (const [feature, weight] of Object.entries(values)) {
-      if (typeof weight !== "number" || !Number.isFinite(weight)) {
-        throw new Error(
-          `Phrase model weight ${group}.${feature} in level ${levelIndex} must be finite`,
-        );
-      }
-    }
-  }
-}
-
-function validateModel(model: PhraseModel): void {
-  if (typeof model !== "object" || model === null || Array.isArray(model)) {
-    throw new Error("Phrase model must be an object");
-  }
-  if (!Array.isArray(model.levels) || model.levels.length === 0) {
-    throw new Error("Phrase model must contain at least one level");
-  }
+function validatePredictedOffsets(
+  text: string,
+  value: unknown,
+  levelIndex: number,
+): readonly number[] {
   if (
-    model.boundaryMode !== undefined &&
-    !["spaces", "characters"].includes(model.boundaryMode)
+    !Array.isArray(value) ||
+    value.some(
+      (offset, index) =>
+        !Number.isInteger(offset) ||
+        offset <= 0 ||
+        offset >= text.length ||
+        (index > 0 && value[index - 1] >= offset),
+    )
   ) {
-    throw new Error('Phrase model boundaryMode must be "spaces" or "characters"');
+    throw new Error(
+      `Phrase model level ${levelIndex} predictor must return ascending UTF-16 source offsets`,
+    );
   }
-  for (const [levelIndex, level] of model.levels.entries()) {
-    if (typeof level !== "object" || level === null || Array.isArray(level)) {
-      throw new Error(`Phrase model level ${levelIndex} must be an object`);
-    }
-    if (level.name !== undefined && typeof level.name !== "string") {
-      throw new Error(`Phrase model level ${levelIndex} name must be a string`);
-    }
-  }
-  const penalties = [...model.levels.map(({ penalty }) => penalty), model.fallbackPenalty];
-  if (penalties.some((penalty) => !Number.isFinite(penalty) || penalty < 0)) {
-    throw new Error("Phrase model penalties must be non-negative finite numbers");
-  }
-  model.levels.forEach(({ model: weights }, levelIndex) =>
-    validateBudouxModel(weights, levelIndex),
-  );
+  return value as readonly number[];
 }
 
 export interface BreakPredictionResult {
@@ -99,16 +73,20 @@ export interface BreakPredictionResult {
 
 /** Runs every model level while preserving each level's boundary predictions. */
 export function predictBreaks(text: string, phraseModel: PhraseModel): BreakPredictionResult {
-  validateModel(phraseModel);
+  validatePhraseModel(phraseModel);
   const allowedOffsets =
     phraseModel.boundaryMode === "characters" ? characterOffsets(text) : spaceOffsets(text);
   const allowedSet = new Set(allowedOffsets);
   const predictions: BreakPrediction[] = [];
 
   phraseModel.levels.forEach((level, levelIndex) => {
-    const parser = new BudouxParser(level.model);
+    const predictedOffsets = validatePredictedOffsets(
+      text,
+      level.predictor.predict(text),
+      levelIndex,
+    );
     const levelOffsets = new Set<number>();
-    for (const predictedOffset of parser.parseBoundaries(text)) {
+    for (const predictedOffset of predictedOffsets) {
       const offset =
         phraseModel.boundaryMode === "characters"
           ? normalizeCharacterOffset(text, predictedOffset)

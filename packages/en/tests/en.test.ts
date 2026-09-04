@@ -2,17 +2,25 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { selectLineBreaks } from "@semantic-wrap/core";
 import { enTitleModel } from "../src/index.js";
+import {
+  englishTitleCoarseModel,
+  englishTitleFineModel,
+  englishTitleMediumModel,
+} from "../src/models.js";
 
 describe("English title model", () => {
-  test("ships only the frozen cumulative coarse, medium, and fine weights", () => {
+  test("adapts the exact cumulative weights into frozen predictor levels", () => {
+    expect(Object.isFrozen(enTitleModel)).toBe(true);
+    expect(Object.isFrozen(enTitleModel.levels)).toBe(true);
+    expect(enTitleModel.levels.every(({ predictor }) => Object.isFrozen(predictor))).toBe(true);
     expect(enTitleModel.levels.map(({ name, penalty }) => ({ name, penalty }))).toEqual([
       { name: "coarse", penalty: 0 },
       { name: "medium", penalty: 0.35 },
       { name: "fine", penalty: 0.7 },
     ]);
     expect(
-      enTitleModel.levels.map(({ model }) =>
-        createHash("sha256").update(JSON.stringify(model)).digest("hex"),
+      [englishTitleCoarseModel, englishTitleMediumModel, englishTitleFineModel].map((weights) =>
+        createHash("sha256").update(JSON.stringify(weights)).digest("hex"),
       ),
     ).toEqual([
       "e57521ae39f0a7216137963062fd6d0ca90f7d2af243e4c946ca3056675ea4e9",
