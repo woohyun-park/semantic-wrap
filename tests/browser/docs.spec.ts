@@ -186,6 +186,20 @@ test("animates the hero scroll cue without making it interactive", async ({ page
   )).toBeGreaterThan(1);
 });
 
+test("preloads the optimized hero brand image", async ({ page }) => {
+  await page.goto(englishLandingUrl);
+
+  const preload = page.locator('link[rel="preload"][as="image"]');
+  const heroMark = page.locator(".hero-brand-lockup .brand-mark");
+
+  await expect(preload).toHaveAttribute("type", "image/webp");
+  await expect(preload).toHaveAttribute("fetchpriority", "high");
+  await expect(preload).toHaveAttribute("href", /brand-mark-.*\.webp$/u);
+  await expect(heroMark).toHaveAttribute("src", /brand-mark-.*\.webp$/u);
+  await expect(heroMark).toHaveAttribute("fetchpriority", "high");
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
+});
+
 test("keeps the process section white while the surrounding page surfaces stay black", async ({ page }) => {
   await page.goto(englishLandingUrl);
 

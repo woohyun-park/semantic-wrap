@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import brandMarkUrl from "./brand-mark.png";
+import brandMarkUrl from "./brand-mark.webp";
 import {
   alternateLocalePath,
   docsPath,
@@ -42,7 +42,7 @@ export function CheckIcon() {
   );
 }
 
-export function BrandMark() {
+export function BrandMark({ priority = false }: { priority?: boolean }) {
   return (
     <img
       className="brand-mark"
@@ -50,6 +50,7 @@ export function BrandMark() {
       alt=""
       width="192"
       height="97"
+      fetchPriority={priority ? "high" : "auto"}
       aria-hidden="true"
     />
   );
@@ -63,12 +64,18 @@ export function Wordmark() {
   );
 }
 
-export function BrandLockup({ className }: { className?: string }) {
+export function BrandLockup({
+  className,
+  priority = false,
+}: {
+  className?: string;
+  priority?: boolean;
+}) {
   const classes = ["brand-lockup", className].filter(Boolean).join(" ");
 
   return (
     <span className={classes}>
-      <BrandMark />
+      <BrandMark priority={priority} />
       <Wordmark />
     </span>
   );
