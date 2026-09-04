@@ -56,6 +56,9 @@ jobs:
         run: |
           version="$(node -e 'const packages = JSON.parse(process.env.PUBLISHED_PACKAGES); const versions = [...new Set(packages.map((item) => item.version))]; if (versions.length !== 1) process.exit(1); process.stdout.write(versions[0]);')"
           gh release create "v${version}" --target "$GITHUB_SHA" --generate-notes --latest
+      - name: Verify published package consumers
+        if: steps.changesets.outputs.has-changesets != 'true'
+        run: bun run smoke:published
       - name: Verify npm, git, and GitHub release synchronization
         if: steps.changesets.outputs.has-changesets != 'true'
         env:

@@ -1,10 +1,22 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const repository = dirname(dirname(fileURLToPath(import.meta.url)));
+const packageNames = [
+  "@semantic-wrap/core",
+  "@semantic-wrap/en",
+  "@semantic-wrap/ko",
+  "@semantic-wrap/react",
+];
+const published = process.argv.includes("--published");
+
+if (process.argv.slice(2).some((argument) => argument !== "--published")) {
+  throw new Error("Usage: node scripts/verify-package-consumer.mjs [--published]");
+}
+
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "semantic-wrap-consumer-"));
 
 function run(command, args, cwd = repository) {
@@ -17,19 +29,62 @@ function run(command, args, cwd = repository) {
   return result.stdout.trim();
 }
 
+function sharedPackageVersion() {
+  const versions = packageNames.map((name) => {
+    const packageDirectory = name.slice("@semantic-wrap/".length);
+    const manifest = JSON.parse(
+      readFileSync(join(repository, "packages", packageDirectory, "package.json"), "utf8"),
+    );
+    return manifest.version;
+  });
+
+  if (new Set(versions).size !== 1) {
+    throw new Error(`Public package versions must match: ${versions.join(", ")}`);
+  }
+
+  return versions[0];
+}
+
+async function waitForPublishedPackages(version) {
+  const attempts = 12;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const availability = await Promise.all(
+      packageNames.map(async (name) => {
+        try {
+          const response = await fetch(
+            `https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}?verified_at=${Date.now()}`,
+            { headers: { Accept: "application/json", "Cache-Control": "no-cache" } },
+          );
+          return response.ok;
+        } catch {
+          return false;
+        }
+      }),
+    );
+
+    if (availability.every(Boolean)) return;
+    if (attempt === attempts) {
+      throw new Error(`Published packages did not become available at v${version}.`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+  }
+}
+
 try {
-  const tarballs = [
-    "@semantic-wrap/core",
-    "@semantic-wrap/en",
-    "@semantic-wrap/ko",
-    "@semantic-wrap/react",
-  ]
-    .map((workspace) =>
-      run("npm", ["pack", "--workspace", workspace, "--pack-destination", temporaryDirectory])
-        .split("\n")
-        .at(-1),
-    )
-    .map((filename) => `./${filename}`);
+  const version = sharedPackageVersion();
+  const packageSources = published
+    ? packageNames.map((name) => `${name}@${version}`)
+    : packageNames
+        .map((workspace) =>
+          run("npm", ["pack", "--workspace", workspace, "--pack-destination", temporaryDirectory])
+            .split("\n")
+            .at(-1),
+        )
+        .map((filename) => `./${filename}`);
+
+  if (published) await waitForPublishedPackages(version);
 
   writeFileSync(
     join(temporaryDirectory, "package.json"),
@@ -42,7 +97,8 @@ try {
       "--ignore-scripts",
       "--no-audit",
       "--no-fund",
-      ...tarballs,
+      ...(published ? ["--prefer-online"] : []),
+      ...packageSources,
       "react@19",
       "react-dom@19",
       "typescript@7",
@@ -158,6 +214,11 @@ void title;
     ),
   );
   run("npx", ["tsc", "--noEmit"], temporaryDirectory);
+  console.log(
+    published
+      ? `Published package consumers passed at v${version}.`
+      : `Packed package consumers passed at v${version}.`,
+  );
 } finally {
   rmSync(temporaryDirectory, { force: true, recursive: true });
 }

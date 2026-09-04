@@ -33,6 +33,7 @@
     "publish:ko": "npm publish --workspace @semantic-wrap/ko --access public",
     "publish:react": "npm publish --workspace @semantic-wrap/react --access public",
     "smoke:packages": "node scripts/verify-package-consumer.mjs",
+    "smoke:published": "node scripts/verify-package-consumer.mjs --published",
     "site:build": "bun run --cwd apps/docs build",
     "site:dev": "bun run --cwd apps/docs dev",
     "site:preview": "bun run --cwd apps/docs preview",
