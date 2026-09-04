@@ -1,6 +1,6 @@
 {
   "name": "@semantic-wrap/en",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Woohyun Park",
   "description": "Experimental English title phrase model for semantic-wrap.",
   "keywords": ["english", "typography", "line-breaking", "budoux"],
@@ -27,7 +27,7 @@
     "pack:check": "bun pm pack --dry-run --ignore-scripts"
   },
   "dependencies": {
-    "@semantic-wrap/core": "^0.3.0"
+    "@semantic-wrap/core": "^0.3.1"
   },
   "publishConfig": { "access": "public" },
   "engines": { "node": ">=22" }

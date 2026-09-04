@@ -1,5 +1,11 @@
 # @semantic-wrap/en
 
+## 0.3.1
+
+### Patch Changes
+
+- @semantic-wrap/core@0.3.1
+
 ## 0.3.0
 
 ### Patch Changes
