@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
+import { exampleCases } from "../../apps/docs/src/example-cases";
 
 const docsUrl = "http://127.0.0.1:4192/ko/docs/introduction";
 const landingUrl = "http://127.0.0.1:4192/ko";
@@ -367,14 +368,14 @@ test("shows an actual semantic before and after in the process", async ({ page }
   await expect(comparison).toHaveAttribute("data-result", "applied");
   await expect(comparison.locator(".is-native > span")).toHaveText("BEFORE");
   await expect(comparison.locator(".is-semantic > span")).toHaveText("AFTER");
-  expect(await comparison.locator(".is-native p").innerText()).toBe(
-    "효율적인 회의를 만들기\n위해 버려야 할 습관",
+  expect(await renderedLines(comparison.locator(".is-native p"))).toEqual(
+    exampleCases.ko.process.reference.nativeLines,
   );
   await expect(comparison.locator(".is-native p")).not.toHaveText(
     await comparison.locator(".is-semantic p").innerText(),
   );
-  expect(await comparison.locator(".is-semantic p").innerText()).toBe(
-    "효율적인 회의를\n만들기 위해 버려야 할 습관",
+  expect(await renderedLines(comparison.locator(".is-semantic p"))).toEqual(
+    exampleCases.ko.process.reference.semanticLines,
   );
   await expect(comparison.locator(".process-selection-reason")).toHaveCount(0);
   await expect(page.locator(".process-stage-status")).toContainText("목적을 분명하게");
@@ -400,11 +401,11 @@ test("keeps the English process candidates and result on the same two-line premi
 
   const comparison = page.locator(".process-selection-comparison");
   await expect(comparison).toHaveAttribute("data-result", "applied");
-  expect(await comparison.locator(".is-native p").innerText()).toBe(
-    "Write clear headlines for\nreaders, not for reviewers",
+  expect(await renderedLines(comparison.locator(".is-native p"))).toEqual(
+    exampleCases.en.process.reference.nativeLines,
   );
-  expect(await comparison.locator(".is-semantic p").innerText()).toBe(
-    "Write clear headlines\nfor readers, not for reviewers",
+  expect(await renderedLines(comparison.locator(".is-semantic p"))).toEqual(
+    exampleCases.en.process.reference.semanticLines,
   );
 });
 
@@ -414,7 +415,10 @@ test("uses an actual CSS balance selection for every landing example", async ({ 
   for (const width of [320, 1280]) {
     await page.setViewportSize({ width, height: 900 });
 
-    for (const url of [englishLandingUrl, landingUrl]) {
+    for (const [locale, url] of [
+      ["en", englishLandingUrl],
+      ["ko", landingUrl],
+    ] as const) {
       await page.goto(url);
 
       const measureSources = page.locator(".line-break-headline-measure-source");
@@ -485,14 +489,26 @@ test("uses an actual CSS balance selection for every landing example", async ({ 
 
       const presets = page.locator(".headline-presets button");
       for (let index = 0; index < 3; index += 1) {
+        const reference = exampleCases[locale].examples[index]?.reference;
+        expect(reference).toBeDefined();
         await presets.nth(index).click();
         await expect(page.locator(".measure-instrument")).toHaveAttribute(
           "data-result",
           "applied",
         );
+        const currentWidth = Number(await page.locator("#measure-width").inputValue());
+        expect(exampleCases[locale].examples[index]?.playgroundMeasures).toContain(currentWidth);
         const browserText = await page.locator(
           ".measure-pane.is-browser .demo-headline:not(.demo-headline-measure-source)",
         ).innerText();
+        if (currentWidth === reference!.width) {
+          expect(await renderedLines(page.locator(
+            ".measure-pane.is-browser .demo-headline:not(.demo-headline-measure-source)",
+          ))).toEqual(reference!.nativeLines);
+          expect(await renderedLines(page.locator(
+            ".measure-pane.is-semantic .demo-headline",
+          ))).toEqual(reference!.semanticLines);
+        }
         await expect(page.locator(".measure-pane.is-semantic .demo-headline")).not.toHaveText(
           browserText,
         );
