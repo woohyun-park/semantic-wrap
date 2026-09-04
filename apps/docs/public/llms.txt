@@ -1,0 +1,26 @@
+# semantic-wrap
+
+> semantic-wrap is a language-independent JavaScript library that combines model-predicted phrase boundaries with actual rendered widths to choose natural line breaks.
+
+Use `@semantic-wrap/react` with `@semantic-wrap/en` or `@semantic-wrap/ko` for React titles. Use `@semantic-wrap/core` when you need a rendering-independent pipeline with your own text measurement. The English and Korean presets are experimental; production users should validate them against representative content.
+
+## Documentation
+
+- [Full LLM documentation](https://semantic-wrap.woohyunpark.xyz/llms-full.txt): Complete English usage and API reference in one Markdown document.
+- [English documentation](https://semantic-wrap.woohyunpark.xyz/docs/introduction): Installation, Core API, React API, strategies, diagnostics, and examples.
+- [Korean documentation](https://semantic-wrap.woohyunpark.xyz/ko/docs/introduction): Korean translation of the documentation.
+- [Interactive Playground](https://semantic-wrap.woohyunpark.xyz/#playground): Compare CSS balance with semantic-wrap at real rendered widths.
+- [GitHub repository](https://github.com/woohyun-park/semantic-wrap): Source, tests, release notes, and model cards.
+
+## Packages
+
+- [@semantic-wrap/core](https://www.npmjs.com/package/@semantic-wrap/core): Dependency-free prediction, candidate aggregation, layout calculation, and selection.
+- [@semantic-wrap/react](https://www.npmjs.com/package/@semantic-wrap/react): Headless React measurement and wrapper-free rendering.
+- [@semantic-wrap/en](https://www.npmjs.com/package/@semantic-wrap/en): Experimental English title model.
+- [@semantic-wrap/ko](https://www.npmjs.com/package/@semantic-wrap/ko): Experimental Korean title model.
+
+## Optional
+
+- [Korean README](https://github.com/woohyun-park/semantic-wrap/blob/main/README-ko_kr.md): Korean project overview and API guide.
+- [English model card](https://github.com/woohyun-park/semantic-wrap/blob/main/packages/en/MODEL_CARD.md): Training scope and limitations of the English preset.
+- [Korean model card](https://github.com/woohyun-park/semantic-wrap/blob/main/packages/ko/MODEL_CARD.md): Training scope and limitations of the Korean preset.

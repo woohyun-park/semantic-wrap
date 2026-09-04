@@ -15,5 +15,5 @@
     "target": "ES2022",
     "types": ["bun"]
   },
-  "include": ["packages/*/src", "packages/*/tests", "tests", "playwright.config.ts"]
+  "include": ["packages/*/src", "packages/*/tests", "scripts/*.ts", "tests", "playwright.config.ts"]
 }

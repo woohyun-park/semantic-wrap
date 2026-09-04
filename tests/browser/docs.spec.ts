@@ -6,6 +6,20 @@ const landingUrl = "http://127.0.0.1:4192/ko";
 const englishDocsUrl = "http://127.0.0.1:4192/docs/introduction";
 const englishLandingUrl = "http://127.0.0.1:4192/";
 
+test("serves AI-readable documentation entrypoints", async ({ request }) => {
+  const summary = await request.get("http://127.0.0.1:4192/llms.txt");
+  const full = await request.get("http://127.0.0.1:4192/llms-full.txt");
+
+  expect(summary.ok()).toBe(true);
+  expect(summary.headers()["content-type"]).toContain("text/plain");
+  expect(await summary.text()).toContain("# semantic-wrap");
+  expect(await summary.text()).toContain("/llms-full.txt");
+  expect(full.ok()).toBe(true);
+  expect(full.headers()["content-type"]).toContain("text/plain");
+  expect(await full.text()).toContain("## Core API");
+  expect(await full.text()).toContain("## React API");
+});
+
 async function semanticPhraseLineCount(
   headline: Locator,
 ): Promise<number> {
