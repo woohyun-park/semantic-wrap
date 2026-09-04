@@ -212,24 +212,19 @@ test("preloads the optimized hero brand image", async ({ page }) => {
   await expect(preload).toHaveAttribute("href", /brand-mark-.*\.webp$/u);
   await expect(heroMark).toHaveAttribute("src", /brand-mark-.*\.webp$/u);
   await expect(heroMark).toHaveAttribute("fetchpriority", "high");
-  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute(
-    "href",
-    "/favicon.svg?v=2",
-  );
-  await expect(page.locator('link[rel="icon"][href="/favicon.ico"]')).toHaveCount(1);
-  await expect(page.locator('link[rel="icon"][href="/favicon-32x32.png"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="icon"][href="/favicon.ico?v=3"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="icon"][href="/favicon-32x32.png?v=3"]')).toHaveCount(1);
   await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
     "href",
-    "/apple-touch-icon.png",
+    "/apple-touch-icon.png?v=3",
   );
 });
 
 test("serves favicon fallbacks as images instead of the SPA shell", async ({ request }) => {
   const icons = [
-    { path: "/favicon.svg?v=2", contentType: "image/svg+xml" },
-    { path: "/favicon.ico", contentType: "image/" },
-    { path: "/favicon-32x32.png", contentType: "image/png" },
-    { path: "/apple-touch-icon.png", contentType: "image/png" },
+    { path: "/favicon.ico?v=3", contentType: "image/" },
+    { path: "/favicon-32x32.png?v=3", contentType: "image/png" },
+    { path: "/apple-touch-icon.png?v=3", contentType: "image/png" },
   ];
 
   for (const icon of icons) {
