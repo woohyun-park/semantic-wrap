@@ -212,7 +212,32 @@ test("preloads the optimized hero brand image", async ({ page }) => {
   await expect(preload).toHaveAttribute("href", /brand-mark-.*\.webp$/u);
   await expect(heroMark).toHaveAttribute("src", /brand-mark-.*\.webp$/u);
   await expect(heroMark).toHaveAttribute("fetchpriority", "high");
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
+  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute(
+    "href",
+    "/favicon.svg?v=2",
+  );
+  await expect(page.locator('link[rel="icon"][href="/favicon.ico"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="icon"][href="/favicon-32x32.png"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+    "href",
+    "/apple-touch-icon.png",
+  );
+});
+
+test("serves favicon fallbacks as images instead of the SPA shell", async ({ request }) => {
+  const icons = [
+    { path: "/favicon.svg?v=2", contentType: "image/svg+xml" },
+    { path: "/favicon.ico", contentType: "image/" },
+    { path: "/favicon-32x32.png", contentType: "image/png" },
+    { path: "/apple-touch-icon.png", contentType: "image/png" },
+  ];
+
+  for (const icon of icons) {
+    const response = await request.get(new URL(icon.path, englishLandingUrl).href);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()["content-type"]).toContain(icon.contentType);
+    expect((await response.body()).byteLength).toBeGreaterThan(100);
+  }
 });
 
 test("keeps the process section white while the surrounding page surfaces stay black", async ({ page }) => {
