@@ -1,6 +1,6 @@
 {
   "name": "@semantic-wrap/react",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Woohyun Park",
   "description": "Headless React integration for model-driven line breaking.",
   "keywords": ["react", "typography", "line-breaking", "text-wrap"],
@@ -27,7 +27,7 @@
     "pack:check": "bun pm pack --dry-run --ignore-scripts"
   },
   "dependencies": {
-    "@semantic-wrap/core": "^0.2.0"
+    "@semantic-wrap/core": "^0.3.0"
   },
   "peerDependencies": {
     "react": ">=19.0.0",
