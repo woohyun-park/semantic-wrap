@@ -1,5 +1,30 @@
 import type { BaselineLayout } from "@semantic-wrap/core";
 
+const MAX_CACHED_TEXT_WIDTHS = 128;
+
+export interface TextMeasurementCache {
+  element: HTMLElement | null;
+  sourceText: string;
+  metricSignature: string;
+  readonly widths: Map<string, number>;
+}
+
+export function createTextMeasurementCache(): TextMeasurementCache {
+  return {
+    element: null,
+    sourceText: "",
+    metricSignature: "",
+    widths: new Map(),
+  };
+}
+
+export function invalidateTextMeasurementCache(cache: TextMeasurementCache): void {
+  cache.element = null;
+  cache.sourceText = "";
+  cache.metricSignature = "";
+  cache.widths.clear();
+}
+
 function copyComputedStyle(source: HTMLElement, target: HTMLElement): void {
   const computed = source.ownerDocument.defaultView!.getComputedStyle(source);
   for (let index = 0; index < computed.length; index += 1) {
@@ -50,7 +75,53 @@ function normalizeMeasuredText(text: string, whiteSpace: string): string {
     .replace(/^ +| +$/gu, "");
 }
 
-export function createTextMeasurer(element: HTMLElement): {
+function textMetricSignature(
+  computed: CSSStyleDeclaration,
+  devicePixelRatio: number,
+): string {
+  return [
+    computed.fontFamily,
+    computed.fontFeatureSettings,
+    computed.fontKerning,
+    computed.fontOpticalSizing,
+    computed.fontSize,
+    computed.fontSizeAdjust,
+    computed.fontStretch,
+    computed.fontStyle,
+    computed.fontSynthesis,
+    computed.fontVariant,
+    computed.fontVariationSettings,
+    computed.fontWeight,
+    computed.letterSpacing,
+    computed.tabSize,
+    computed.textTransform,
+    computed.whiteSpace,
+    computed.wordSpacing,
+    String(devicePixelRatio),
+  ].join("\u0000");
+}
+
+function cachedWidth(cache: TextMeasurementCache, text: string): number | undefined {
+  const width = cache.widths.get(text);
+  if (width === undefined) return undefined;
+  cache.widths.delete(text);
+  cache.widths.set(text, width);
+  return width;
+}
+
+function rememberWidth(cache: TextMeasurementCache, text: string, width: number): void {
+  cache.widths.delete(text);
+  cache.widths.set(text, width);
+  if (cache.widths.size <= MAX_CACHED_TEXT_WIDTHS) return;
+  const oldest = cache.widths.keys().next().value;
+  if (oldest !== undefined) cache.widths.delete(oldest);
+}
+
+export function createTextMeasurer(
+  element: HTMLElement,
+  cache = createTextMeasurementCache(),
+  sourceText = element.textContent ?? "",
+): {
   measureText(text: string): number;
   dispose(): void;
 } {
@@ -58,45 +129,63 @@ export function createTextMeasurer(element: HTMLElement): {
   const view = document.defaultView;
   if (!view) throw new Error("SemanticWrap requires an element attached to a window");
   const computed = view.getComputedStyle(element);
-  const probe = document.createElement("span");
-  Object.assign(probe.style, {
-    all: "initial",
-    contain: "layout style paint",
-    fontFamily: computed.fontFamily,
-    fontFeatureSettings: computed.fontFeatureSettings,
-    fontKerning: computed.fontKerning,
-    fontOpticalSizing: computed.fontOpticalSizing,
-    fontSize: computed.fontSize,
-    fontSizeAdjust: computed.fontSizeAdjust,
-    fontStretch: computed.fontStretch,
-    fontStyle: computed.fontStyle,
-    fontSynthesis: computed.fontSynthesis,
-    fontVariant: computed.fontVariant,
-    fontVariationSettings: computed.fontVariationSettings,
-    fontWeight: computed.fontWeight,
-    letterSpacing: computed.letterSpacing,
-    position: "fixed",
-    tabSize: computed.tabSize,
-    textTransform: computed.textTransform,
-    visibility: "hidden",
-    whiteSpace: "pre",
-    wordSpacing: computed.wordSpacing,
-  });
-  document.body.append(probe);
-  const cache = new Map<string, number>();
+  const signature = textMetricSignature(computed, view.devicePixelRatio);
+  if (
+    cache.element !== element ||
+    cache.sourceText !== sourceText ||
+    cache.metricSignature !== signature
+  ) {
+    cache.element = element;
+    cache.sourceText = sourceText;
+    cache.metricSignature = signature;
+    cache.widths.clear();
+  }
+
+  let probe: HTMLSpanElement | null = null;
+  const activeProbe = (): HTMLSpanElement => {
+    if (probe) return probe;
+    probe = document.createElement("span");
+    Object.assign(probe.style, {
+      all: "initial",
+      contain: "layout style paint",
+      fontFamily: computed.fontFamily,
+      fontFeatureSettings: computed.fontFeatureSettings,
+      fontKerning: computed.fontKerning,
+      fontOpticalSizing: computed.fontOpticalSizing,
+      fontSize: computed.fontSize,
+      fontSizeAdjust: computed.fontSizeAdjust,
+      fontStretch: computed.fontStretch,
+      fontStyle: computed.fontStyle,
+      fontSynthesis: computed.fontSynthesis,
+      fontVariant: computed.fontVariant,
+      fontVariationSettings: computed.fontVariationSettings,
+      fontWeight: computed.fontWeight,
+      letterSpacing: computed.letterSpacing,
+      position: "fixed",
+      tabSize: computed.tabSize,
+      textTransform: computed.textTransform,
+      visibility: "hidden",
+      whiteSpace: "pre",
+      wordSpacing: computed.wordSpacing,
+    });
+    probe.setAttribute("aria-hidden", "true");
+    document.body.append(probe);
+    return probe;
+  };
+
   return {
     measureText(text) {
       const measuredText = normalizeMeasuredText(text, computed.whiteSpace);
-      const cached = cache.get(measuredText);
+      const cached = cachedWidth(cache, measuredText);
       if (cached !== undefined) return cached;
-      probe.textContent = measuredText;
-      const width = probe.getBoundingClientRect().width;
-      cache.set(measuredText, width);
+      const currentProbe = activeProbe();
+      currentProbe.textContent = measuredText;
+      const width = currentProbe.getBoundingClientRect().width;
+      rememberWidth(cache, measuredText, width);
       return width;
     },
     dispose() {
-      probe.remove();
-      cache.clear();
+      probe?.remove();
     },
   };
 }
@@ -116,12 +205,12 @@ function readBreaks(element: HTMLElement, text: string): number[] {
   let sourceOffset = 0;
   let previousTop: number | null = null;
   let node: Node | null;
+  const range = document.createRange();
   while ((node = walker.nextNode())) {
     const data = node.nodeValue ?? "";
     let nodeOffset = 0;
     for (const character of data) {
       const nextOffset = nodeOffset + character.length;
-      const range = document.createRange();
       range.setStart(node, nodeOffset);
       range.setEnd(node, nextOffset);
       const top = Math.round(range.getBoundingClientRect().top * 100) / 100;

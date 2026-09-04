@@ -28,7 +28,14 @@ import {
  * Core owns language-agnostic selection. This package only measures and renders
  * React elements.
  */
-import { contentWidth, createTextMeasurer, readNativeLayout } from "./dom-measure.js";
+import {
+  contentWidth,
+  createTextMeasurementCache,
+  createTextMeasurer,
+  invalidateTextMeasurementCache,
+  readNativeLayout,
+  type TextMeasurementCache,
+} from "./dom-measure.js";
 
 const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
@@ -104,12 +111,17 @@ function useSemanticWrapEngine(
   const [resolutionState, setResolutionState] = useState<Resolution | null>(null);
   const resolutionRef = useRef<Resolution | null>(null);
   const progressiveActiveRef = useRef(mode === "precise");
+  const textMeasurementCacheRef = useRef<TextMeasurementCache | null>(null);
+  if (textMeasurementCacheRef.current === null) {
+    textMeasurementCacheRef.current = createTextMeasurementCache();
+  }
+  const textMeasurementCache = textMeasurementCacheRef.current;
 
   const measure = useCallback(
     (target: HTMLElement): Resolution | null => {
       const width = contentWidth(target);
       if (!Number.isFinite(width) || width <= 0) return null;
-      const measurer = createTextMeasurer(target);
+      const measurer = createTextMeasurer(target, textMeasurementCache, options.text);
       try {
         const input = {
           maxWidth: width,
@@ -123,7 +135,7 @@ function useSemanticWrapEngine(
         measurer.dispose();
       }
     },
-    [options.diagnostics, options.text, plan],
+    [options.diagnostics, options.text, plan, textMeasurementCache],
   );
 
   const measureAndCommit = useCallback(
@@ -143,6 +155,7 @@ function useSemanticWrapEngine(
 
   useBrowserLayoutEffect(() => {
     if (!element) {
+      invalidateTextMeasurementCache(textMeasurementCache);
       resolutionRef.current = null;
       setResolutionState(null);
       return;
@@ -203,7 +216,9 @@ function useSemanticWrapEngine(
 
     const fonts = target.ownerDocument.fonts;
     const remeasureAfterFontLoad = () => {
-      if (active && preciseActive) measureAndCommit(target, true);
+      if (!active || !preciseActive) return;
+      invalidateTextMeasurementCache(textMeasurementCache);
+      measureAndCommit(target, true);
     };
     void fonts.ready.then(remeasureAfterFontLoad);
     fonts.addEventListener("loadingdone", remeasureAfterFontLoad);
@@ -215,7 +230,7 @@ function useSemanticWrapEngine(
       mutationObserver.disconnect();
       fonts.removeEventListener("loadingdone", remeasureAfterFontLoad);
     };
-  }, [element, measureAndCommit, mode, plan]);
+  }, [element, measureAndCommit, mode, plan, textMeasurementCache]);
 
   const resolution =
     element &&

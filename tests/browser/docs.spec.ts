@@ -212,7 +212,32 @@ test("preloads the optimized hero brand image", async ({ page }) => {
   await expect(preload).toHaveAttribute("href", /brand-mark-.*\.webp$/u);
   await expect(heroMark).toHaveAttribute("src", /brand-mark-.*\.webp$/u);
   await expect(heroMark).toHaveAttribute("fetchpriority", "high");
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
+  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute(
+    "href",
+    "/favicon.svg?v=2",
+  );
+  await expect(page.locator('link[rel="icon"][href="/favicon.ico"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="icon"][href="/favicon-32x32.png"]')).toHaveCount(1);
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+    "href",
+    "/apple-touch-icon.png",
+  );
+});
+
+test("serves favicon fallbacks as images instead of the SPA shell", async ({ request }) => {
+  const icons = [
+    { path: "/favicon.svg?v=2", contentType: "image/svg+xml" },
+    { path: "/favicon.ico", contentType: "image/" },
+    { path: "/favicon-32x32.png", contentType: "image/png" },
+    { path: "/apple-touch-icon.png", contentType: "image/png" },
+  ];
+
+  for (const icon of icons) {
+    const response = await request.get(new URL(icon.path, englishLandingUrl).href);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()["content-type"]).toContain(icon.contentType);
+    expect((await response.body()).byteLength).toBeGreaterThan(100);
+  }
 });
 
 test("keeps the process section white while the surrounding page surfaces stay black", async ({ page }) => {
@@ -872,6 +897,32 @@ test("shows a meaningful English change for every playground preset", async ({ p
     expect(semanticLines.some((line) => line.includes(phrase!))).toBe(true);
     await expect(semanticHeadline.locator(".semantic-diff-changed")).not.toHaveCount(0);
   }
+});
+
+test("updates both playground panes from a dragged measure handle", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(englishLandingUrl);
+
+  const input = page.locator("#measure-width");
+  const initialWidth = Number(await input.inputValue());
+  const handle = page.locator(".measure-drag-handle").first();
+  await handle.scrollIntoViewIfNeeded();
+  const bounds = await handle.boundingBox();
+  expect(bounds).not.toBeNull();
+
+  const startX = (bounds?.x ?? 0) + (bounds?.width ?? 0) / 2;
+  const startY = (bounds?.y ?? 0) + (bounds?.height ?? 0) / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX - 48, startY, { steps: 8 });
+  await page.mouse.up();
+
+  await expect.poll(async () => Number(await input.inputValue())).toBeLessThan(initialWidth);
+  const paneWidths = await page.locator(".headline-measure").evaluateAll(
+    (elements) => elements.map((element) => element.getBoundingClientRect().width),
+  );
+  expect(paneWidths).toHaveLength(2);
+  expect(Math.abs(paneWidths[0]! - paneWidths[1]!)).toBeLessThan(1);
 });
 
 test("keeps both playground results within one mobile viewport", async ({ page }) => {

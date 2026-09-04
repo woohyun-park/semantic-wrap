@@ -61,6 +61,69 @@ test("commits each resize without exposing a break-free intermediate frame", asy
   expect(snapshots.every((html) => html.includes("<br>"))).toBe(true);
 });
 
+test("reuses text widths across resizes and invalidates them for typography changes", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const stats = { probeReads: 0 };
+    Object.defineProperty(window, "__semanticWrapMeasurementStats", { value: stats });
+    const getBoundingClientRect = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () {
+      if (
+        this instanceof HTMLSpanElement &&
+        this.style.position === "fixed" &&
+        this.style.visibility === "hidden"
+      ) {
+        stats.probeReads += 1;
+      }
+      return getBoundingClientRect.call(this);
+    };
+  });
+  await page.goto("/");
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const stats = Reflect.get(window, "__semanticWrapMeasurementStats") as {
+      probeReads: number;
+    };
+    stats.probeReads = 0;
+  });
+
+  const resizeAtomicTitle = async (width: number) => {
+    await page.locator("#atomic-container").evaluate((element, nextWidth) => {
+      element.style.width = `${nextWidth}px`;
+    }, width);
+    await page.evaluate(() =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+    );
+  };
+  const probeReads = () => page.evaluate(() => (
+    Reflect.get(window, "__semanticWrapMeasurementStats") as { probeReads: number }
+  ).probeReads);
+
+  await resizeAtomicTitle(320);
+  const readsAfterNewLayout = await probeReads();
+  expect(readsAfterNewLayout).toBeGreaterThan(0);
+
+  await resizeAtomicTitle(200);
+  await resizeAtomicTitle(320);
+  expect(await probeReads()).toBe(readsAfterNewLayout);
+
+  await page.locator("#atomic-title").evaluate((element) => {
+    element.style.fontSize = "31px";
+  });
+  await page.evaluate(() =>
+    new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    ),
+  );
+  expect(await probeReads()).toBeGreaterThan(readsAfterNewLayout);
+});
+
 test("remeasures after a resize and returns to native wrapping", async ({ page }) => {
   await page.goto("/");
 
