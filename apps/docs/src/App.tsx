@@ -221,6 +221,9 @@ function Playground({ locale }: { locale: SiteLocale }) {
   const model = titleModels[locale];
   const paneBodyRef = useRef<HTMLDivElement>(null);
   const dragPointerRef = useRef<number | null>(null);
+  const dragContentLeftRef = useRef<number | null>(null);
+  const pendingWidthRef = useRef<number | null>(null);
+  const widthFrameRef = useRef<number | null>(null);
   const [headlineIndex, setHeadlineIndex] = useState(0);
   const [measureDragging, setMeasureDragging] = useState(false);
   const { maxWidth, setWidth, width } = useMeasureWidth(paneBodyRef);
@@ -238,18 +241,46 @@ function Playground({ locale }: { locale: SiteLocale }) {
   const nativeLineCount = currentDiagnostics?.nativeLayout?.lineCount ?? 1;
   const semanticLineCount = currentSelection?.lines.length ?? nativeLineCount;
 
-  function setWidthFromPointer(event: ReactPointerEvent<HTMLSpanElement>) {
-    const paneBody = event.currentTarget.closest<HTMLElement>(".measure-pane-body");
-    if (!paneBody) return;
+  useEffect(() => () => {
+    if (widthFrameRef.current !== null) {
+      window.cancelAnimationFrame(widthFrameRef.current);
+    }
+  }, []);
 
-    const bounds = paneBody.getBoundingClientRect();
-    const styles = window.getComputedStyle(paneBody);
-    const contentLeft = bounds.left + Number.parseFloat(styles.paddingLeft);
+  function scheduleWidth(nextWidth: number) {
+    pendingWidthRef.current = nextWidth;
+    if (widthFrameRef.current !== null) return;
+    widthFrameRef.current = window.requestAnimationFrame(() => {
+      widthFrameRef.current = null;
+      const pendingWidth = pendingWidthRef.current;
+      pendingWidthRef.current = null;
+      if (pendingWidth !== null) setWidth(pendingWidth);
+    });
+  }
+
+  function flushScheduledWidth() {
+    if (widthFrameRef.current !== null) {
+      window.cancelAnimationFrame(widthFrameRef.current);
+      widthFrameRef.current = null;
+    }
+    const pendingWidth = pendingWidthRef.current;
+    pendingWidthRef.current = null;
+    if (pendingWidth !== null) setWidth(pendingWidth);
+  }
+
+  function setWidthFromPointer(event: ReactPointerEvent<HTMLSpanElement>) {
+    const contentLeft = dragContentLeftRef.current;
+    if (contentLeft === null) return;
     const nextWidth = Math.round((event.clientX - contentLeft) / 2) * 2;
-    setWidth(Math.max(240, Math.min(maxWidth, nextWidth)));
+    scheduleWidth(Math.max(240, Math.min(maxWidth, nextWidth)));
   }
 
   function startMeasureDrag(event: ReactPointerEvent<HTMLSpanElement>) {
+    const paneBody = event.currentTarget.closest<HTMLElement>(".measure-pane-body");
+    if (!paneBody) return;
+    const bounds = paneBody.getBoundingClientRect();
+    const styles = window.getComputedStyle(paneBody);
+    dragContentLeftRef.current = bounds.left + Number.parseFloat(styles.paddingLeft);
     dragPointerRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
     setMeasureDragging(true);
@@ -265,9 +296,11 @@ function Playground({ locale }: { locale: SiteLocale }) {
   function finishMeasureDrag(event: ReactPointerEvent<HTMLSpanElement>) {
     if (dragPointerRef.current !== event.pointerId) return;
     dragPointerRef.current = null;
+    dragContentLeftRef.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+    flushScheduledWidth();
     setMeasureDragging(false);
   }
 
@@ -377,7 +410,7 @@ function Playground({ locale }: { locale: SiteLocale }) {
                 step="2"
                 value={width}
                 aria-valuetext={playground.widthValue(width)}
-                onChange={(event) => setWidth(Number(event.currentTarget.value))}
+                onChange={(event) => scheduleWidth(Number(event.currentTarget.value))}
               />
               <div className="range-scale" aria-hidden="true">
                 <span>240px</span>

@@ -874,6 +874,32 @@ test("shows a meaningful English change for every playground preset", async ({ p
   }
 });
 
+test("updates both playground panes from a dragged measure handle", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(englishLandingUrl);
+
+  const input = page.locator("#measure-width");
+  const initialWidth = Number(await input.inputValue());
+  const handle = page.locator(".measure-drag-handle").first();
+  await handle.scrollIntoViewIfNeeded();
+  const bounds = await handle.boundingBox();
+  expect(bounds).not.toBeNull();
+
+  const startX = (bounds?.x ?? 0) + (bounds?.width ?? 0) / 2;
+  const startY = (bounds?.y ?? 0) + (bounds?.height ?? 0) / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX - 48, startY, { steps: 8 });
+  await page.mouse.up();
+
+  await expect.poll(async () => Number(await input.inputValue())).toBeLessThan(initialWidth);
+  const paneWidths = await page.locator(".headline-measure").evaluateAll(
+    (elements) => elements.map((element) => element.getBoundingClientRect().width),
+  );
+  expect(paneWidths).toHaveLength(2);
+  expect(Math.abs(paneWidths[0]! - paneWidths[1]!)).toBeLessThan(1);
+});
+
 test("keeps both playground results within one mobile viewport", async ({ page }) => {
   const viewport = { width: 390, height: 844 };
   await page.setViewportSize(viewport);
