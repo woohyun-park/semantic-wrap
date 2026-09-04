@@ -16,8 +16,21 @@ export interface InternalLayout {
 
 interface CandidateLayout {
   breaks: BreakCandidate[];
+  signature: string;
   rawBalanceCost: number;
   rawModelCost: number;
+}
+
+/** Internal counters used by the repository benchmark. Not part of the package API. */
+export interface OptimalLayoutCalculationStats {
+  measuredSegments: number;
+  visitedStates: number;
+  memoHits: number;
+  prunedTransitions: number;
+  generatedLayouts: number;
+  paretoComparisons: number;
+  peakBufferedLayouts: number;
+  maxFrontierSize: number;
 }
 
 const EPSILON = 1e-9;
@@ -40,33 +53,42 @@ export function splitAtOffsets(text: string, offsets: readonly number[]): string
   return lines;
 }
 
-function signature(layout: Pick<InternalLayout, "breaks">): string {
-  return layout.breaks.map(({ offset }) => offset).join(",");
+function compareCandidateLayouts(
+  left: CandidateLayout,
+  right: CandidateLayout,
+): number {
+  const balance = left.rawBalanceCost - right.rawBalanceCost;
+  if (Math.abs(balance) > EPSILON) return balance;
+  const model = left.rawModelCost - right.rawModelCost;
+  if (Math.abs(model) > EPSILON) return model;
+  return left.signature.localeCompare(right.signature);
 }
 
-function dominates(left: CandidateLayout, right: CandidateLayout): boolean {
-  return (
-    left.rawBalanceCost <= right.rawBalanceCost + EPSILON &&
-    left.rawModelCost <= right.rawModelCost + EPSILON
-  );
-}
-
-function pareto(layouts: CandidateLayout[]): CandidateLayout[] {
-  const ordered = layouts.sort((left, right) => {
-    const balance = left.rawBalanceCost - right.rawBalanceCost;
-    if (Math.abs(balance) > EPSILON) return balance;
-    const model = left.rawModelCost - right.rawModelCost;
-    if (Math.abs(model) > EPSILON) return model;
-    return signature(left).localeCompare(signature(right));
-  });
+function mergeParetoFrontiers(
+  left: readonly CandidateLayout[],
+  right: readonly CandidateLayout[],
+  stats?: OptimalLayoutCalculationStats,
+): CandidateLayout[] {
   const frontier: CandidateLayout[] = [];
-  for (const layout of ordered) {
-    if (frontier.some((existing) => dominates(existing, layout))) continue;
-    for (let index = frontier.length - 1; index >= 0; index -= 1) {
-      if (dominates(layout, frontier[index]!)) frontier.splice(index, 1);
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let bestModelCost = Number.POSITIVE_INFINITY;
+
+  while (leftIndex < left.length || rightIndex < right.length) {
+    const takeLeft =
+      rightIndex >= right.length ||
+      (leftIndex < left.length &&
+        compareCandidateLayouts(left[leftIndex]!, right[rightIndex]!) <= 0);
+    const layout = takeLeft ? left[leftIndex++]! : right[rightIndex++]!;
+    if (frontier.length > 0) {
+      if (stats) stats.paretoComparisons += 1;
+      if (bestModelCost <= layout.rawModelCost + EPSILON) continue;
     }
+
     frontier.push(layout);
+    bestModelCost = layout.rawModelCost;
   }
+  if (stats) stats.maxFrontierSize = Math.max(stats.maxFrontierSize, frontier.length);
   return frontier;
 }
 
@@ -123,6 +145,7 @@ export function layoutAtBreaks(
 /** Finds the non-dominated, minimum-line layouts across balance and model cost. */
 export function calculateOptimalLayouts(
   context: LayoutCalculationContext,
+  stats?: OptimalLayoutCalculationStats,
 ): LineBreakLayoutCandidate[] {
   if (context.text === "") return [{ breaks: [] }];
   const boundaries = context.candidates;
@@ -138,7 +161,10 @@ export function calculateOptimalLayouts(
 
   for (let start = 0; start < positions.length; start += 1) {
     for (let end = start; end < positions.length; end += 1) {
-      segmentWidths[start]![end] = context.measureText(segmentText(start, end));
+      if (stats) stats.measuredSegments += 1;
+      const width = context.measureText(segmentText(start, end));
+      segmentWidths[start]![end] = width;
+      if (width > context.maxWidth + EPSILON) break;
     }
   }
 
@@ -161,12 +187,17 @@ export function calculateOptimalLayouts(
   function solve(start: number, remainingLines: number): CandidateLayout[] {
     const key = `${start}:${remainingLines}`;
     const cached = memo.get(key);
-    if (cached) return cached;
+    if (cached) {
+      if (stats) stats.memoHits += 1;
+      return cached;
+    }
+    if (stats) stats.visitedStates += 1;
     if (start === positions.length) {
       const result: CandidateLayout[] =
         remainingLines === 0
           ? [{
               breaks: [],
+              signature: "",
               rawBalanceCost: 0,
               rawModelCost: 0,
             }]
@@ -176,26 +207,47 @@ export function calculateOptimalLayouts(
     }
     if (remainingLines <= 0 || positions.length - start < remainingLines) return [];
 
-    const layouts: CandidateLayout[] = [];
+    let frontier: CandidateLayout[] = [];
     for (let end = start; end < positions.length; end += 1) {
       const width = segmentWidths[start]![end]!;
       if (width > context.maxWidth + EPSILON) break;
       const isLastLine = end === positions.length - 1;
       if (isLastLine !== (remainingLines === 1)) continue;
-      const rest = solve(end + 1, remainingLines - 1);
+      const nextStart = end + 1;
+      const nextRemainingLines = remainingLines - 1;
+      if (
+        minimumLines[nextStart]! > nextRemainingLines ||
+        positions.length - nextStart < nextRemainingLines
+      ) {
+        if (stats) stats.prunedTransitions += 1;
+        continue;
+      }
+      const rest = solve(nextStart, nextRemainingLines);
       const selectedBreak = isLastLine ? undefined : boundaries[end];
       const normalizedDeviation = (width - targetWidth) / context.maxWidth;
+      const layouts: CandidateLayout[] = [];
       for (const suffix of rest) {
+        const breaks = selectedBreak ? [selectedBreak, ...suffix.breaks] : suffix.breaks;
         layouts.push({
-          breaks: selectedBreak ? [selectedBreak, ...suffix.breaks] : suffix.breaks,
+          breaks,
+          signature: selectedBreak
+            ? `${selectedBreak.offset}${suffix.signature === "" ? "" : `,${suffix.signature}`}`
+            : suffix.signature,
           rawBalanceCost: normalizedDeviation ** 2 + suffix.rawBalanceCost,
           rawModelCost: (selectedBreak?.penalty ?? 0) + suffix.rawModelCost,
         });
+        if (stats) {
+          stats.generatedLayouts += 1;
+          stats.peakBufferedLayouts = Math.max(
+            stats.peakBufferedLayouts,
+            frontier.length + layouts.length,
+          );
+        }
       }
+      frontier = mergeParetoFrontiers(frontier, layouts, stats);
     }
-    const result = pareto(layouts);
-    memo.set(key, result);
-    return result;
+    memo.set(key, frontier);
+    return frontier;
   }
 
   const layouts = solve(0, lineCount);

@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "build": "bun run clean && tsc -b tsconfig.build.json",
+    "bench:core": "bun scripts/benchmark-optimal-layouts.ts",
     "changeset": "changeset",
     "ai-docs:check": "bun scripts/sync-ai-docs.ts --check",
     "ai-docs:sync": "bun scripts/sync-ai-docs.ts",
