@@ -1,5 +1,12 @@
 # @semantic-wrap/react
 
+## 0.3.1
+
+### Patch Changes
+
+- a005253: Reuse bounded text-width measurements across responsive layout selections while invalidating the cache when the measured element, source text, typography, or loaded fonts change.
+- @semantic-wrap/core@0.3.1
+
 ## 0.3.0
 
 ### Patch Changes
