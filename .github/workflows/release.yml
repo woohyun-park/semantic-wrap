@@ -5,7 +5,6 @@ on:
     branches: [main]
 
 permissions:
-  actions: write
   contents: write
   id-token: write
   pull-requests: write
@@ -19,6 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Create release app token
+        id: release-app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -42,14 +47,7 @@ jobs:
           pr-title: "chore: version packages"
           create-github-releases: false
           push-git-tags: true
-      - name: Run CI for version pull request
-        if: steps.changesets.outputs.pr-number != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION_PR: ${{ steps.changesets.outputs.pr-number }}
-        run: |
-          changeset_ref="$(gh pr view "$VERSION_PR" --json headRefName --jq .headRefName)"
-          gh workflow run ci.yml --ref "$changeset_ref"
+          github-token: ${{ steps.release-app.outputs.token }}
       - name: Create unified GitHub Release
         if: steps.changesets.outputs.published == 'true'
         env:
@@ -58,6 +56,9 @@ jobs:
         run: |
           version="$(node -e 'const packages = JSON.parse(process.env.PUBLISHED_PACKAGES); const versions = [...new Set(packages.map((item) => item.version))]; if (versions.length !== 1) process.exit(1); process.stdout.write(versions[0]);')"
           gh release create "v${version}" --target "$GITHUB_SHA" --generate-notes --latest
+      - name: Verify published package consumers
+        if: steps.changesets.outputs.has-changesets != 'true'
+        run: bun run smoke:published
       - name: Verify npm, git, and GitHub release synchronization
         if: steps.changesets.outputs.has-changesets != 'true'
         env:
