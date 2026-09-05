@@ -207,7 +207,8 @@ test("preserves callback and object ref cleanup semantics", async ({ page }) => 
 });
 
 test("updates selected candidate metadata when the model changes", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?candidate=1");
+  await page.evaluate(() => document.fonts.ready);
 
   const name = page.locator("#candidate-name");
   await expect(name).toHaveText("initial");

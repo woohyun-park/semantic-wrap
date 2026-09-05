@@ -4,13 +4,14 @@ import {
   createBudouxPredictor,
   createLineBreakStrategy,
   nearbyLayouts,
+  selectLineBreaks,
   type LineBreakCalculator,
   type LineBreakStrategy,
   type PhraseModel,
 } from "../../packages/core/src/index.js";
 import { SemanticWrap } from "../../packages/react/src/index.js";
 import { useSemanticWrap } from "../../packages/react/src/index.js";
-import { createTextMeasurer, readNativeLayout } from "../../packages/react/src/dom-measure.js";
+import { contentWidth, createTextMeasurer, readNativeLayout } from "../../packages/react/src/dom-measure.js";
 import { koTitleModel } from "../../packages/ko/src/index.js";
 import { installNearbyBenchmark } from "./nearby-benchmark.js";
 import { installBatchWidthChecks } from "./batch-widths.js";
@@ -18,6 +19,23 @@ import { ResizeFixture } from "./resize-fixture.js";
 import { SchedulingFixture, schedulingConfig } from "./scheduling-fixture.js";
 
 installBatchWidthChecks();
+
+// Fresh synchronous oracle for resize tests, using this browser's actual font metrics.
+Reflect.set(window, "__resizeReference", (text: string) => {
+  const element = document.querySelector<HTMLElement>("#resize-text")!;
+  const measurer = createTextMeasurer(element, undefined, text);
+  try {
+    const selection = selectLineBreaks({
+      text,
+      model: koTitleModel,
+      maxWidth: contentWidth(element),
+      measureText: measurer.measureText,
+    }, { nativeLayout: readNativeLayout(element, text) });
+    return selection.applied ? selection.lines.join("\n") : text;
+  } finally {
+    measurer.dispose();
+  }
+});
 
 const model: PhraseModel = {
   boundaryMode: "spaces",
@@ -437,6 +455,7 @@ function App() {
   }
   if (new URLSearchParams(location.search).has("resize-demo")) return <ResizeFixture longText={LONG_BENCHMARK_TEXT} />;
   const search = new URLSearchParams(window.location.search);
+  if (search.has("candidate")) return <CandidateFixture />;
   if (search.has("nearby-react")) return <NearbyReactFixture />;
   if (search.get("benchmark") === "long") {
     return <LongBenchmarkFixture diagnostics={search.get("diagnostics") === "true"} />;
