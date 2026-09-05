@@ -70,6 +70,9 @@ const syntheticWords = Array.from(
   (_, index) => `${String.fromCharCode(97 + (index % 26))}${index}`,
 ).join(" ");
 const characterText = "의미있는문장을자연스럽고균형있게나누는알고리즘실험";
+const longSyntheticText = Array.from({ length: 1_338 }, (_, index) => `단어${index % 97}`).join(
+  " ",
+);
 
 const benchmarkCases: BenchmarkCase[] = [
   ...documentationCases,
@@ -91,10 +94,17 @@ const benchmarkCases: BenchmarkCase[] = [
     maxWidth: 12,
     candidates: candidatesAtCharacters(characterText),
   },
+  {
+    name: "synthetic-long-narrow-1338",
+    text: longSyntheticText,
+    maxWidth: 48,
+    candidates: candidatesAtSpaces(longSyntheticText),
+  },
 ];
 
 function emptyStats(): OptimalLayoutCalculationStats {
   return {
+    allocatedSegmentWidthSlots: 0,
     measuredSegments: 0,
     visitedStates: 0,
     memoHits: 0,
@@ -125,7 +135,8 @@ function percentile(values: readonly number[], fraction: number): number {
 
 function measureTime(benchmarkCase: BenchmarkCase): { medianMs: number; p95Ms: number } {
   const context = contextFor(benchmarkCase);
-  const iterations = benchmarkCase.candidates.length > 24 ? 25 : 200;
+  const iterations =
+    benchmarkCase.candidates.length > 256 ? 5 : benchmarkCase.candidates.length > 24 ? 25 : 200;
   for (let index = 0; index < Math.min(iterations, 25); index += 1) {
     calculateOptimalLayouts(context);
   }
@@ -159,7 +170,10 @@ const results = benchmarkCases.map((benchmarkCase) => {
     name: benchmarkCase.name,
     candidateCount: benchmarkCase.candidates.length,
     layoutCount: layouts.length,
-    signature: layouts.map(({ breaks }) => breaks.join(",")).join("|"),
+    signature: layouts
+      .map(({ breaks }) => breaks.join(","))
+      .join("|")
+      .slice(0, 240),
     measureTextCalls,
     ...stats,
     medianMs: Number(time.medianMs.toFixed(4)),

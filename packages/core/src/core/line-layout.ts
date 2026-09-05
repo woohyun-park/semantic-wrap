@@ -23,6 +23,7 @@ interface CandidateLayout {
 
 /** Internal counters used by the repository benchmark. Not part of the package API. */
 export interface OptimalLayoutCalculationStats {
+  allocatedSegmentWidthSlots: number;
   measuredSegments: number;
   visitedStates: number;
   memoHits: number;
@@ -155,24 +156,30 @@ export function calculateOptimalLayouts(
       positions[start]!,
       end < boundaries.length ? boundaries[end]!.offset : undefined,
     );
-  const segmentWidths = Array.from({ length: positions.length }, () =>
-    new Array<number>(positions.length).fill(Number.POSITIVE_INFINITY),
-  );
+  const segmentWidths: number[] = [];
+  const segmentRowOffsets = new Uint32Array(positions.length + 1);
 
   for (let start = 0; start < positions.length; start += 1) {
+    segmentRowOffsets[start] = segmentWidths.length;
     for (let end = start; end < positions.length; end += 1) {
       if (stats) stats.measuredSegments += 1;
       const width = context.measureText(segmentText(start, end));
-      segmentWidths[start]![end] = width;
+      segmentWidths.push(width);
+      if (stats) stats.allocatedSegmentWidthSlots += 1;
       if (width > context.maxWidth + EPSILON) break;
     }
   }
+  segmentRowOffsets[positions.length] = segmentWidths.length;
 
   const minimumLines = new Array<number>(positions.length + 1).fill(Number.POSITIVE_INFINITY);
   minimumLines[positions.length] = 0;
   for (let start = positions.length - 1; start >= 0; start -= 1) {
-    for (let end = start; end < positions.length; end += 1) {
-      if (segmentWidths[start]![end]! > context.maxWidth + EPSILON) break;
+    const rowStart = segmentRowOffsets[start]!;
+    const rowEnd = segmentRowOffsets[start + 1]!;
+    for (let index = rowStart; index < rowEnd; index += 1) {
+      const end = start + index - rowStart;
+      const width = segmentWidths[index]!;
+      if (width > context.maxWidth + EPSILON) break;
       minimumLines[start] = Math.min(minimumLines[start]!, 1 + minimumLines[end + 1]!);
     }
   }
@@ -208,8 +215,11 @@ export function calculateOptimalLayouts(
     if (remainingLines <= 0 || positions.length - start < remainingLines) return [];
 
     let frontier: CandidateLayout[] = [];
-    for (let end = start; end < positions.length; end += 1) {
-      const width = segmentWidths[start]![end]!;
+    const rowStart = segmentRowOffsets[start]!;
+    const rowEnd = segmentRowOffsets[start + 1]!;
+    for (let index = rowStart; index < rowEnd; index += 1) {
+      const end = start + index - rowStart;
+      const width = segmentWidths[index]!;
       if (width > context.maxWidth + EPSILON) break;
       const isLastLine = end === positions.length - 1;
       if (isLastLine !== (remainingLines === 1)) continue;

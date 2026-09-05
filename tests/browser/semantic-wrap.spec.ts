@@ -1,5 +1,19 @@
 import { expect, test } from "@playwright/test";
 
+test("finds the same native line starts as a per-character scan", async ({ page }) => {
+  await page.goto("/?native-parity=true");
+
+  const output = page.locator("#native-layout-parity");
+  await expect(output).not.toHaveText("");
+  const cases = JSON.parse((await output.textContent()) ?? "[]") as Array<{
+    id: string;
+    optimized: number[];
+    linear: number[];
+  }>;
+  expect(cases.length).toBeGreaterThan(0);
+  for (const result of cases) expect(result.optimized, result.id).toEqual(result.linear);
+});
+
 test("renders a selected hard break without adding a wrapper", async ({ page }) => {
   await page.goto("/");
 
@@ -65,8 +79,20 @@ test("reuses text widths across resizes and invalidates them for typography chan
   page,
 }) => {
   await page.addInitScript(() => {
-    const stats = { probeReads: 0 };
+    const stats = { probeAppends: 0, probeReads: 0, probeRemoves: 0 };
     Object.defineProperty(window, "__semanticWrapMeasurementStats", { value: stats });
+    const isProbe = (value: unknown) =>
+      value instanceof HTMLElement && value.getAttribute("aria-hidden") === "true";
+    const append = Element.prototype.append;
+    Element.prototype.append = function (...nodes) {
+      stats.probeAppends += nodes.filter(isProbe).length;
+      return append.apply(this, nodes);
+    };
+    const remove = Element.prototype.remove;
+    Element.prototype.remove = function () {
+      if (isProbe(this)) stats.probeRemoves += 1;
+      return remove.call(this);
+    };
     const getBoundingClientRect = Element.prototype.getBoundingClientRect;
     Element.prototype.getBoundingClientRect = function () {
       if (
@@ -85,10 +111,11 @@ test("reuses text widths across resizes and invalidates them for typography chan
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
-    const stats = Reflect.get(window, "__semanticWrapMeasurementStats") as {
-      probeReads: number;
-    };
-    stats.probeReads = 0;
+    const stats = Reflect.get(window, "__semanticWrapMeasurementStats") as Record<
+      "probeAppends" | "probeReads" | "probeRemoves",
+      number
+    >;
+    Object.assign(stats, { probeAppends: 0, probeReads: 0, probeRemoves: 0 });
   });
 
   const resizeAtomicTitle = async (width: number) => {
@@ -104,6 +131,13 @@ test("reuses text widths across resizes and invalidates them for typography chan
   const probeReads = () => page.evaluate(() => (
     Reflect.get(window, "__semanticWrapMeasurementStats") as { probeReads: number }
   ).probeReads);
+  const probeLifecycle = () => page.evaluate(() => {
+    const stats = Reflect.get(window, "__semanticWrapMeasurementStats") as {
+      probeAppends: number;
+      probeRemoves: number;
+    };
+    return [stats.probeAppends, stats.probeRemoves];
+  });
 
   await resizeAtomicTitle(320);
   const readsAfterNewLayout = await probeReads();
@@ -112,6 +146,7 @@ test("reuses text widths across resizes and invalidates them for typography chan
   await resizeAtomicTitle(200);
   await resizeAtomicTitle(320);
   expect(await probeReads()).toBe(readsAfterNewLayout);
+  expect(await probeLifecycle()).toEqual([0, 0]);
 
   await page.locator("#atomic-title").evaluate((element) => {
     element.style.fontSize = "31px";
@@ -122,6 +157,9 @@ test("reuses text widths across resizes and invalidates them for typography chan
     ),
   );
   expect(await probeReads()).toBeGreaterThan(readsAfterNewLayout);
+  const [appendsAfterTypographyChange, removesAfterTypographyChange] = await probeLifecycle();
+  expect(appendsAfterTypographyChange).toBeGreaterThan(0);
+  expect(removesAfterTypographyChange).toBeGreaterThan(0);
 });
 
 test("remeasures after a resize and returns to native wrapping", async ({ page }) => {

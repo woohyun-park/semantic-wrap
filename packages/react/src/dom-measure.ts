@@ -7,6 +7,7 @@ export interface TextMeasurementCache {
   sourceText: string;
   metricSignature: string;
   readonly widths: Map<string, number>;
+  probe: HTMLSpanElement | null;
 }
 
 export function createTextMeasurementCache(): TextMeasurementCache {
@@ -15,18 +16,47 @@ export function createTextMeasurementCache(): TextMeasurementCache {
     sourceText: "",
     metricSignature: "",
     widths: new Map(),
+    probe: null,
   };
 }
 
 export function invalidateTextMeasurementCache(cache: TextMeasurementCache): void {
+  cache.probe?.remove();
   cache.element = null;
   cache.sourceText = "";
   cache.metricSignature = "";
   cache.widths.clear();
+  cache.probe = null;
 }
 
-function copyComputedStyle(source: HTMLElement, target: HTMLElement): void {
-  const computed = source.ownerDocument.defaultView!.getComputedStyle(source);
+export interface NativeLayoutMeasurementCache {
+  element: HTMLElement | null;
+  sourceText: string;
+  layoutSignature: string;
+  probe: HTMLElement | null;
+  characterOffsets: readonly number[];
+}
+
+export function createNativeLayoutMeasurementCache(): NativeLayoutMeasurementCache {
+  return {
+    element: null,
+    sourceText: "",
+    layoutSignature: "",
+    probe: null,
+    characterOffsets: [],
+  };
+}
+
+export function invalidateNativeLayoutMeasurementCache(cache: NativeLayoutMeasurementCache): void {
+  cache.probe?.remove();
+  cache.element = null;
+  cache.sourceText = "";
+  cache.layoutSignature = "";
+  cache.probe = null;
+  cache.characterOffsets = [];
+}
+
+function copyComputedStyle(computed: CSSStyleDeclaration, target: HTMLElement): void {
   for (let index = 0; index < computed.length; index += 1) {
     const property = computed.item(index);
     target.style.setProperty(
@@ -101,6 +131,29 @@ function textMetricSignature(
   ].join("\u0000");
 }
 
+function nativeLayoutSignature(
+  element: HTMLElement,
+  computed: CSSStyleDeclaration,
+  devicePixelRatio: number,
+): string {
+  return [
+    textMetricSignature(computed, devicePixelRatio),
+    computed.direction,
+    computed.getPropertyValue("hyphenate-character"),
+    computed.getPropertyValue("hyphenate-limit-chars"),
+    computed.hyphens,
+    computed.getPropertyValue("line-break"),
+    computed.overflowWrap,
+    computed.textIndent,
+    computed.getPropertyValue("text-orientation"),
+    computed.getPropertyValue("text-wrap-mode"),
+    computed.getPropertyValue("text-wrap-style"),
+    computed.wordBreak,
+    computed.writingMode,
+    element.closest("[lang]")?.getAttribute("lang") ?? "",
+  ].join("\u0000");
+}
+
 function cachedWidth(cache: TextMeasurementCache, text: string): number | undefined {
   const width = cache.widths.get(text);
   if (width === undefined) return undefined;
@@ -119,32 +172,33 @@ function rememberWidth(cache: TextMeasurementCache, text: string, width: number)
 
 export function createTextMeasurer(
   element: HTMLElement,
-  cache = createTextMeasurementCache(),
+  cache?: TextMeasurementCache,
   sourceText = element.textContent ?? "",
 ): {
   measureText(text: string): number;
   dispose(): void;
 } {
+  const ownsCache = cache === undefined;
+  const measurementCache = cache ?? createTextMeasurementCache();
   const document = element.ownerDocument;
   const view = document.defaultView;
   if (!view) throw new Error("SemanticWrap requires an element attached to a window");
   const computed = view.getComputedStyle(element);
   const signature = textMetricSignature(computed, view.devicePixelRatio);
   if (
-    cache.element !== element ||
-    cache.sourceText !== sourceText ||
-    cache.metricSignature !== signature
+    measurementCache.element !== element ||
+    measurementCache.sourceText !== sourceText ||
+    measurementCache.metricSignature !== signature
   ) {
-    cache.element = element;
-    cache.sourceText = sourceText;
-    cache.metricSignature = signature;
-    cache.widths.clear();
+    invalidateTextMeasurementCache(measurementCache);
+    measurementCache.element = element;
+    measurementCache.sourceText = sourceText;
+    measurementCache.metricSignature = signature;
   }
 
-  let probe: HTMLSpanElement | null = null;
   const activeProbe = (): HTMLSpanElement => {
-    if (probe) return probe;
-    probe = document.createElement("span");
+    if (measurementCache.probe) return measurementCache.probe;
+    const probe = document.createElement("span");
     Object.assign(probe.style, {
       all: "initial",
       contain: "layout style paint",
@@ -170,22 +224,23 @@ export function createTextMeasurer(
     });
     probe.setAttribute("aria-hidden", "true");
     document.body.append(probe);
+    measurementCache.probe = probe;
     return probe;
   };
 
   return {
     measureText(text) {
       const measuredText = normalizeMeasuredText(text, computed.whiteSpace);
-      const cached = cachedWidth(cache, measuredText);
+      const cached = cachedWidth(measurementCache, measuredText);
       if (cached !== undefined) return cached;
       const currentProbe = activeProbe();
       currentProbe.textContent = measuredText;
       const width = currentProbe.getBoundingClientRect().width;
-      rememberWidth(cache, measuredText, width);
+      rememberWidth(measurementCache, measuredText, width);
       return width;
     },
     dispose() {
-      probe?.remove();
+      if (ownsCache) invalidateTextMeasurementCache(measurementCache);
     },
   };
 }
@@ -196,65 +251,154 @@ function whitespaceRunStart(text: string, offset: number): number {
   return runStart;
 }
 
-function readBreaks(element: HTMLElement, text: string): number[] {
+function characterOffsets(text: string): number[] {
+  const offsets = [0];
+  let offset = 0;
+  for (const character of text) {
+    offset += character.length;
+    offsets.push(offset);
+  }
+  return offsets;
+}
+
+function readBreaksLinear(node: Text, offsets: readonly number[], range: Range): number[] {
+  const lineStarts: number[] = [];
+  let previousTop: number | null = null;
+  for (let index = 0; index < offsets.length - 1; index += 1) {
+    const start = offsets[index]!;
+    range.setStart(node, start);
+    range.setEnd(node, offsets[index + 1]!);
+    const top = Math.round(range.getBoundingClientRect().top * 100) / 100;
+    if (previousTop !== null && top !== previousTop) lineStarts.push(start);
+    previousTop = top;
+  }
+  return lineStarts;
+}
+
+function normalizeLineStarts(text: string, lineStarts: readonly number[]): number[] {
+  return [...new Set(lineStarts.map((lineStart) => whitespaceRunStart(text, lineStart)))].filter(
+    (offset) => offset > 0 && offset < text.length,
+  );
+}
+
+function readBreaks(
+  element: HTMLElement,
+  text: string,
+  offsets: readonly number[],
+  forceLinear: boolean,
+): number[] {
   const document = element.ownerDocument;
   const view = document.defaultView;
   if (!view) return [];
-  const walker = document.createTreeWalker(element, view.NodeFilter.SHOW_TEXT);
-  const lineStarts: number[] = [];
-  let sourceOffset = 0;
-  let previousTop: number | null = null;
-  let node: Node | null;
-  const range = document.createRange();
-  while ((node = walker.nextNode())) {
-    const data = node.nodeValue ?? "";
-    let nodeOffset = 0;
-    for (const character of data) {
-      const nextOffset = nodeOffset + character.length;
-      range.setStart(node, nodeOffset);
-      range.setEnd(node, nextOffset);
-      const top = Math.round(range.getBoundingClientRect().top * 100) / 100;
-      if (previousTop !== null && top !== previousTop) lineStarts.push(sourceOffset);
-      previousTop = top;
-      sourceOffset += character.length;
-      nodeOffset = nextOffset;
-    }
-  }
-  if (sourceOffset !== text.length) {
+  const node = element.firstChild;
+  if (!(node instanceof view.Text) || node.data.length !== text.length) {
     throw new Error("Could not map the rendered title back to its source text");
   }
-  return [...new Set(lineStarts.map((lineStart) => whitespaceRunStart(text, lineStart)))]
-    .filter((offset) => offset > 0 && offset < text.length);
+  if (offsets.length <= 1) return [];
+
+  const range = document.createRange();
+  if (forceLinear) return normalizeLineStarts(text, readBreaksLinear(node, offsets, range));
+
+  const topByCharacter = new Map<number, number>();
+  const topAt = (index: number): number => {
+    const cached = topByCharacter.get(index);
+    if (cached !== undefined) return cached;
+    range.setStart(node, offsets[index]!);
+    range.setEnd(node, offsets[index + 1]!);
+    const top = Math.round(range.getBoundingClientRect().top * 100) / 100;
+    topByCharacter.set(index, top);
+    return top;
+  };
+  const lineStarts: number[] = [];
+  let monotonic = true;
+  const findTransitions = (start: number, end: number): void => {
+    const startTop = topAt(start);
+    const endTop = topAt(end);
+    if (endTop < startTop) {
+      monotonic = false;
+      return;
+    }
+    if (startTop === endTop) return;
+    if (end - start === 1) {
+      lineStarts.push(offsets[end]!);
+      return;
+    }
+    const middle = Math.floor((start + end) / 2);
+    const middleTop = topAt(middle);
+    if (middleTop < startTop || middleTop > endTop) {
+      monotonic = false;
+      return;
+    }
+    findTransitions(start, middle);
+    findTransitions(middle, end);
+  };
+
+  findTransitions(0, offsets.length - 2);
+  const exactLineStarts = monotonic ? lineStarts : readBreaksLinear(node, offsets, range);
+  return normalizeLineStarts(text, exactLineStarts);
 }
 
 /** Measures native wrapping in an invisible copy, without mutating the visible element. */
-export function readNativeLayout(element: HTMLElement, text: string): BaselineLayout {
+export function readNativeLayout(
+  element: HTMLElement,
+  text: string,
+  cache?: NativeLayoutMeasurementCache,
+): BaselineLayout {
+  const ownsCache = cache === undefined;
+  const measurementCache = cache ?? createNativeLayoutMeasurementCache();
   const document = element.ownerDocument;
-  const probe = document.createElement(element.tagName.toLowerCase());
-  copyComputedStyle(element, probe);
+  const view = document.defaultView;
+  if (!view) return { breaks: [] };
+  const computed = view.getComputedStyle(element);
+  const signature = nativeLayoutSignature(element, computed, view.devicePixelRatio);
+  if (
+    measurementCache.element !== element ||
+    measurementCache.sourceText !== text ||
+    measurementCache.layoutSignature !== signature
+  ) {
+    invalidateNativeLayoutMeasurementCache(measurementCache);
+    measurementCache.element = element;
+    measurementCache.sourceText = text;
+    measurementCache.layoutSignature = signature;
+    measurementCache.characterOffsets = characterOffsets(text);
+  }
+
+  let probe = measurementCache.probe;
+  if (!probe) {
+    probe = document.createElement(element.tagName.toLowerCase());
+    copyComputedStyle(computed, probe);
+    Object.assign(probe.style, {
+      boxSizing: "content-box",
+      height: "auto",
+      left: "-100000px",
+      margin: "0",
+      maxHeight: "none",
+      maxWidth: "none",
+      minHeight: "0",
+      minWidth: "0",
+      pointerEvents: "none",
+      position: "fixed",
+      top: "0",
+      transform: "none",
+      visibility: "hidden",
+    });
+    probe.setAttribute("aria-hidden", "true");
+    probe.textContent = text;
+    document.body.append(probe);
+    measurementCache.probe = probe;
+  }
   const width = contentWidth(element);
-  Object.assign(probe.style, {
-    boxSizing: "content-box",
-    height: "auto",
-    left: "-100000px",
-    margin: "0",
-    maxHeight: "none",
-    maxWidth: "none",
-    minHeight: "0",
-    minWidth: "0",
-    pointerEvents: "none",
-    position: "fixed",
-    top: "0",
-    transform: "none",
-    visibility: "hidden",
-    width: `${width}px`,
-  });
-  probe.setAttribute("aria-hidden", "true");
-  probe.textContent = text;
-  document.body.append(probe);
+  probe.style.width = `${width}px`;
   try {
-    return { breaks: readBreaks(probe, text) };
+    return {
+      breaks: readBreaks(
+        probe,
+        text,
+        measurementCache.characterOffsets,
+        computed.writingMode !== "horizontal-tb",
+      ),
+    };
   } finally {
-    probe.remove();
+    if (ownsCache) invalidateNativeLayoutMeasurementCache(measurementCache);
   }
 }
