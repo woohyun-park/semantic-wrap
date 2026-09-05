@@ -68,10 +68,11 @@ export function Title({ children }: { children: string }) {
 }
 ```
 
-`SemanticWrap`은 별도의 엘리먼트를 추가하지 않습니다. 기본값인 precise 모드는 SSR
-원문을 HTML에 유지하되 최초의 정확한 선택이 준비될 때까지 opacity를 0으로 둔 뒤
-결과를 표시합니다. progressive 모드는 SSR 원문을 전혀 변경하지 않고 첫 viewport
-또는 element resize부터 precise 선택을 시작합니다.
+`SemanticWrap`은 별도의 엘리먼트를 추가하지 않습니다. 최초 표시는 `initial`, 리사이즈
+처리는 `resize`로 독립적으로 선택합니다. 기본값은 `resolved` + `immediate`로,
+최초 계산 후 표시하고 너비 변경에는 동기적으로 반응합니다. 긴 본문에는
+`initial="native" resize="settled"`로 원문부터 표시하고 계산을 나누어 진행할 수 있습니다.
+네 조합 모두 같은 정확한 선택을 사용하며 표시와 적용 시점만 다릅니다.
 
 ## 동작 방식
 
@@ -442,19 +443,33 @@ ref를 전달할 수 있어야 합니다.
 | `children` | 예 | - | 하나의 plain-text React 엘리먼트 |
 | `model` | 예 | - | 줄바꿈 후보를 만드는 모델 |
 | `strategy` | 아니요 | 기본 strategy | 후보 통합, layout 후보 계산, 최종 선택 규칙 |
-| `mode` | 아니요 | `"precise"` | `"precise"`는 정확한 최초 결과를 기다리고, `"progressive"`는 native SSR을 즉시 표시한 뒤 첫 viewport 또는 element resize부터 precise로 동작 |
+| `initial` | 아니요 | `"resolved"` | 최초 계산 후 표시. `"native"`는 원문부터 표시한 뒤 자동 분할 계산 |
+| `resize` | 아니요 | `"immediate"` | 동기 계산·즉시 적용. `"settled"`는 분할 계산·너비 안정 후 적용 |
+| `mode` | 아니요 | — | Deprecated. 기존 `"precise"` / `"progressive"` 호환용이며 새 옵션과 혼용 불가 |
 | `ref` | 아니요 | - | 자식과 함께 사용할 `HTMLElement` ref |
 
 ```tsx
-<SemanticWrap mode="progressive" model={koTitleModel}>
+<SemanticWrap initial="native" resize="settled" model={koTitleModel}>
   <h1>{title}</h1>
 </SemanticWrap>
 ```
 
-두 모드 모두 보이지 않는 DOM copy에서 측정합니다. precise는 최초 결과를 동기적으로
-표시하고, resize 중에는 원문의 기본 줄바꿈을 보여주며 계산을 나누어 진행합니다. 너비가
-약 100ms 동안 안정되고 계산이 완료되면 최신 결과를 한 번에 적용합니다. hook의
-selection은 계산 중 null일 수 있습니다. progressive의 기존 동기 resize 동작은 유지합니다.
+모든 조합은 보이지 않는 DOM copy에서 측정합니다. `resolved`는 최초 계산 완료까지
+opacity를 0으로 둡니다. `native`는 원문이 표시될 기회를 준 다음 약 4ms 단위로 자동
+계산하며 리사이즈나 추가 100ms 대기를 요구하지 않습니다. `settled`는 원문을 보여주며
+계산하고, 너비가 약 100ms 동안 안정되고 계산이 끝나면 최신 결과만 적용합니다.
+4ms는 작업 목표이며 100ms 내 계산 완료를 보장하지 않습니다.
+
+텍스트 변경에는 최초 표시 정책을, 폰트·스타일 변경에는 업데이트 정책을 적용합니다.
+같은 텍스트와 측정 조건에서 모델·전략 참조만 바뀌면 기존 표시를 유지하며 재검증하고,
+결과가 달라질 때만 갱신합니다. 참조를 안정적으로 유지하면 중복 계산을 줄일 수 있지만,
+정상 동작을 위한 필수 조건은 아닙니다. `useSemanticWrap`도 같은 두 옵션을 받으며 대기 중 selection/diagnostics가
+null일 수 있습니다. Hook은 DOM이나 CSS를 변경하지 않아 표시 여부는 사용자가 결정합니다.
+
+기존 `mode="precise"`는 `resolved` + `immediate`입니다. 기존 `mode="progressive"`는
+첫 viewport/element resize까지 계산을 기다리는 동작을 보존하며 새 `initial="native"`와
+다릅니다. 두 mode는 deprecated이고 새 옵션과 혼용할 수 없습니다. 중간 구현인
+`57f73fd`의 안정 후 적용 동작은 이제 `resize="settled"`로 명시적으로 선택합니다.
 
 Chakra UI처럼 ref를 전달하는 컴포넌트나 Tailwind CSS로 스타일을 적용한 엘리먼트도
 같은 방식으로 사용할 수 있습니다.
@@ -500,13 +515,15 @@ Core를 직접 사용하세요.
 | `model` | 예 | - | 줄바꿈 후보를 만드는 모델 |
 | `strategy` | 아니요 | 기본 strategy | 후보 통합, layout 후보 계산, 최종 선택 규칙 |
 | `diagnostics` | 아니요 | `false` | 예측과 단계별 중간 결과를 함께 반환할지 여부 |
+| `initial` | 아니요 | `"resolved"` | 최초 동기 계산. native는 원문 표시 기회 후 자동 분할 계산 |
+| `resize` | 아니요 | `"immediate"` | 동기 업데이트. settled는 분할 계산·너비 안정 후 적용 |
 
 출력: `UseSemanticWrapResult`
 
 | 필드 | 타입 | 설명 |
 | --- | --- | --- |
 | `ref` | `(element: HTMLElement \| null) => void` | 측정할 엘리먼트에 연결하는 callback ref |
-| `selection` | `LineBreakSelection \| null` | 아직 측정하지 않았으면 `null`, 측정 후에는 선택 결과 |
+| `selection` | `LineBreakSelection \| null` | 최초 측정 전이나 텍스트·측정 조건 변경에 따른 대기 중 `null`. 참조만 변경된 재검증에서는 기존 결과 유지 |
 | `diagnostics` | `LineBreakDiagnostics \| null` | 진단을 요청하지 않았거나 아직 측정 전이면 `null` |
 
 Hook은 선택 결과를 markup에 직접 적용하지 않습니다. 다음 예시는 선택된 각 줄 사이에
@@ -527,7 +544,7 @@ export function BreakPreview({ title }: { title: string }) {
 }
 ```
 
-`useSemanticWrap`은 CSS를 변경하지 않습니다. `SemanticWrap`의 precise 모드는 최초
+`useSemanticWrap`은 CSS를 변경하지 않습니다. `SemanticWrap`의 `initial="resolved"`는 최초
 선택 전 opacity만 일시적으로 변경합니다. 기존 CSS는 비교 대상인 브라우저의 줄바꿈에
 반영되며, 모델 결과가 선택되면 `<br>`로 줄바꿈을 적용합니다.
 

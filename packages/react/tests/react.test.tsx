@@ -1,10 +1,44 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { koTitleModel } from "@semantic-wrap/ko";
-import { SemanticWrap } from "../src/index.js";
+import { SemanticWrap, type SemanticWrapProps } from "../src/index.js";
 import { createLineBreakStrategy, nearbyLayouts } from "@semantic-wrap/core";
 
 describe("SemanticWrap", () => {
+  test("supports all four SSR combinations without leaking scheduling props to the DOM", () => {
+    for (const initial of ["resolved", "native"] as const) {
+      for (const resize of ["immediate", "settled"] as const) {
+        const html = renderToStaticMarkup(
+          <SemanticWrap model={koTitleModel} initial={initial} resize={resize}>
+            <p style={{ color: "red", opacity: 0.7 }}>하나 둘 셋</p>
+          </SemanticWrap>,
+        );
+        expect(html).toBe(`<p style="color:red;opacity:${initial === "resolved" ? 0 : 0.7}">하나 둘 셋</p>`);
+      }
+    }
+  });
+
+  test("rejects mixed legacy/new props and invalid policies at runtime", () => {
+    for (const props of [
+      { mode: "precise", initial: "resolved" },
+      { mode: "progressive", resize: "settled" },
+      { initial: "wrong" }, { resize: "wrong" }, { mode: "wrong" },
+    ]) {
+      expect(() => renderToStaticMarkup(<SemanticWrap
+        {...({ model: koTitleModel, ...props } as unknown as SemanticWrapProps)}
+      ><p>하나 둘 셋</p></SemanticWrap>)).toThrow("SemanticWrap");
+    }
+  });
+
+  test("rejects mixed legacy/new props at compile time", () => {
+    // @ts-expect-error legacy and new scheduling are mutually exclusive
+    const invalid: SemanticWrapProps = { model: koTitleModel, mode: "precise", initial: "native", children: <p /> };
+    expect(invalid.mode).toBe("precise");
+    const legacy = (mode: "precise" | "progressive" | undefined): SemanticWrapProps => ({
+      model: koTitleModel, mode, children: <p />,
+    });
+    expect(legacy(undefined).mode).toBeUndefined();
+  });
   test("keeps SSR source and wrapper semantics with the nearby calculator", () => {
     const strategy = createLineBreakStrategy({ calculate: nearbyLayouts() });
     for (const mode of ["precise", "progressive"] as const) {

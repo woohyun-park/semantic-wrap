@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { SemanticWrap } from "../../packages/react/src/index.js";
+import { SemanticWrap, type SemanticWrapInitial, type SemanticWrapResize } from "../../packages/react/src/index.js";
 import { koTitleModel } from "../../packages/ko/src/index.js";
 
 export function ResizeFixture({ longText }: { longText: string }) {
   const search = new URLSearchParams(location.search);
   const kind = search.get("input") ?? "long";
+  const initial = (search.get("initial") ?? "resolved") as SemanticWrapInitial;
+  const resize = (search.get("resize") ?? "settled") as SemanticWrapResize;
   const original =
     kind === "short"
       ? "더 나은 제품을 만들기 위해 팀이 버려야 할 습관"
@@ -34,7 +36,7 @@ export function ResizeFixture({ longText }: { longText: string }) {
   return (
     <section style={{ fontFamily: "system-ui", padding: 16, color: "#17243a" }}>
       <h1 style={{ margin: "0 0 10px", fontSize: 24 }}>
-        {search.get("before") ? "AS-IS · synchronous resize" : "TO-BE · cooperative resize"}
+        {search.get("label") ?? (search.get("before") ? "AS-IS · synchronous resize" : `${initial} / ${resize}`)}
       </h1>
       <div style={{ height: 12, width: 300, background: "#e8edf3", marginBottom: 12 }}>
         <div id="resize-heartbeat" style={{ width: 20, height: 12, background: "#247bc1" }} />
@@ -69,7 +71,7 @@ export function ResizeFixture({ longText }: { longText: string }) {
         style={{ width: 660, border: "2px solid #9bb4cf", padding: 0, marginTop: 12 }}
       >
         {mounted && (
-          <SemanticWrap model={koTitleModel}>
+          <SemanticWrap model={koTitleModel} initial={initial} resize={resize}>
             <p
               id="resize-text"
               style={{

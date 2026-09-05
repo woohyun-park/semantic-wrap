@@ -33,27 +33,50 @@ export function Title({ children }: { children: string }) {
 element여야 하고 실제 `HTMLElement`로 ref를 전달해야 합니다. `model`은 필수이며,
 Core의 기본 동작을 바꾸려면 `strategy`를 선택적으로 전달합니다.
 
-기본값인 precise 모드는 SSR 원문을 HTML에 유지하되 최초의 정확한 layout이 준비될
-때까지 자식의 opacity를 잠시 0으로 둡니다. 첫 화면의 semantic 정확도보다 즉시 LCP가
-중요하면 progressive 모드를 사용합니다.
+## 최초 표시와 업데이트 정책
+
+| 옵션 | 기본값 | 대안 |
+| --- | --- | --- |
+| `initial` | `"resolved"`: 최초 계산 완료까지 숨김 | `"native"`: 원문 표시 후 자동 분할 계산 |
+| `resize` | `"immediate"`: 동기 계산·즉시 적용 | `"settled"`: 분할 계산·너비 안정 후 적용 |
+
+네 조합 모두 같은 정확한 계산과 native 비교를 사용합니다.
 
 ```tsx
-<SemanticWrap mode="progressive" model={koTitleModel}>
-  <h1>{title}</h1>
+<SemanticWrap initial="native" resize="settled" model={koTitleModel}>
+  <p>{text}</p>
 </SemanticWrap>
 ```
 
-progressive는 최초에 원문을 그대로 렌더링하고 첫 viewport 또는 element resize부터
-영구적으로 precise 파이프라인을 사용합니다. 두 모드 모두 보이지 않는 copy에서 native
-layout을 측정합니다. precise는 최초 결과를 동기적으로 표시한 뒤, resize 중에는 원문의
-기본 줄바꿈을 보여주며 계산을 작은 작업으로 나누어 진행합니다. 너비가 약 100ms 동안
-안정되고 계산이 완료되면 최신 결과를 한 번에 적용합니다. 이때 hook의 selection은
-계산 중 null일 수 있지만 컴포넌트의 원문은 숨기지 않습니다. progressive의 resize 처리는
-기존처럼 동기적으로 유지됩니다.
+`native`는 원문이 먼저 표시될 기회를 준 다음 자동으로 계산을 시작합니다.
+리사이즈를 기다리지 않으며 최초 결과에는 별도 100ms 대기를 넣지 않습니다.
+최초 계산 도중 너비가 바뀌면 이전 작업을 취소하고 선택한 리사이즈 정책을 적용합니다.
+`settled`는 원문을 계속 보여주며 약 4ms 단위로 계산하고, 너비가 약 100ms 동안
+안정되고 계산이 끝나면 최신 결과만 적용합니다. `immediate`에는 이 대기가 없습니다.
 
-구간별 실측 너비는 측정 조건별로 최대 65,536개 재사용합니다. 글꼴 등 측정 조건이 바뀌거나
-unmount되면 무효화됩니다. 약 4ms 작업 예산은 목표값이며, 개별 DOM 연산과 사용자 제공
-동기 콜백을 실행 도중 중단할 수는 없습니다.
+텍스트 변경에는 최초 표시 정책을, 폰트·스타일 변경에는 업데이트 정책을 적용합니다.
+같은 텍스트와 측정 조건에서 모델·전략 참조만 바뀌면 기존 표시를 유지하며 재검증합니다.
+줄바꿈 위치뿐 아니라 후보 메타데이터와 diagnostics를 포함해 결과가 달라질 때만 갱신합니다.
+옵션 변경과 unmount는 이전 작업을 취소합니다. SSR에서도 `resolved`는
+원문을 HTML에 유지하되 opacity를 0으로 두고, `native`는 원문을 표시한 뒤 hydration에서
+자동 계산을 시작합니다. 별도의 DOM wrapper는 추가하지 않습니다.
+
+### 기존 mode에서 전환
+
+`mode`와 `SemanticWrapMode`는 deprecated이며 호환성은 유지합니다.
+
+- `mode="precise"`는 `initial="resolved" resize="immediate"`와 같습니다.
+- `mode="progressive"`는 첫 viewport/element resize까지 원문만 보여주고 이후 동기
+  계산하는 기존 동작을 유지합니다. 자동 계산하는 새 `initial="native"`와는 다릅니다.
+- `mode`와 새 옵션의 혼용은 TypeScript와 런타임에서 거부합니다.
+- 중간 구현인 `57f73fd`의 안정 후 적용 방식은 `resize="settled"`로 명시적으로 선택합니다.
+  기본값은 그 이전의 즉시 적용 방식으로 복원됩니다.
+
+구간별 실측 너비는 측정 조건별로 최대 65,536개 재사용합니다. 글꼴 조건 변경과
+unmount에서 무효화됩니다. 4ms는 작업 목표이며 개별 DOM 연산과 사용자 제공 동기
+콜백은 중간에 멈출 수 없습니다. 최종 결과는 100ms보다 늦게 완료될 수 있습니다.
+모델·전략 참조를 안정적으로 유지하면 중복 계산을 줄이지만, 메모이제이션이 정상 동작의
+필수 조건은 아닙니다. 콜백은 같은 입력에 같은 결과를 반환해야 합니다.
 
 ### Chakra UI
 
@@ -90,11 +113,16 @@ const { ref, selection, diagnostics } = useSemanticWrap({
   text: title,
   model: koTitleModel,
   diagnostics: true,
+  initial: "native",
+  resize: "settled",
 });
 ```
 
 `useSemanticWrap`은 측정용 `ref`, 선택 결과, 선택적인 diagnostics를 반환하며 대상
-엘리먼트의 children, 원문, CSS를 변경하지 않습니다.
+엘리먼트의 children, 원문, CSS를 변경하지 않습니다. 같은 initial/resize 옵션으로 실행
+시점을 선택합니다. 최초 계산이나 텍스트·측정 조건 변경에 따른 분할 계산 대기 중에는
+selection과 diagnostics가 null이며 이때 원문을 렌더링하세요. 참조만 변경된 재검증에서는
+기존 결과를 유지합니다. 최초 표시를 숨길지 여부도 Hook 사용자가 직접 결정합니다.
 
 ## 긴 입력에서 주변 탐색 사용하기
 

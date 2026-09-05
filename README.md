@@ -61,17 +61,12 @@ export function Title({ children }: { children: string }) {
 }
 ```
 
-`SemanticWrap` preserves its child element and adds no wrapper. Precise mode is the default:
-it keeps SSR text in the HTML, holds it at zero opacity until the first exact selection is
-ready, and then renders the result. Progressive mode leaves SSR text completely untouched
-and starts precise selection on the first viewport or element resize.
-
-After its first exact layout, `precise` shows native wrapping while resizing and completes
-the same global calculation in cooperative slices. It applies only the latest result once
-the width has been stable for approximately 100 ms and calculation is complete. This keeps
-long resize calculations from continuously blocking the main thread; the final wrapping can
-arrive later. Initial precise rendering remains synchronous. Progressive resize behavior is
-unchanged. No additional mode or wrapper is required.
+`SemanticWrap` preserves its child element and adds no wrapper. First display and resize
+scheduling are independent: `initial="resolved"` and `resize="immediate"` are the defaults,
+preserving exact-first display and synchronous updates. For long text, choose
+`initial="native" resize="settled"` to show the source first, calculate cooperatively,
+and apply resize results once the width is stable. All four combinations use the same
+exact selection; only display and update timing differ.
 
 ## Packages
 
@@ -385,19 +380,35 @@ Wrap the styled element when using Chakra UI or Tailwind CSS.
 | `children` | yes | — | One plain-text React element |
 | `model` | yes | — | Phrase model used to create boundary candidates |
 | `strategy` | no | default strategy | Aggregation, calculation, and selection rules |
-| `mode` | no | `"precise"` | `"precise"` waits for the exact first layout; `"progressive"` shows native SSR and activates precise selection on the first viewport or element resize |
+| `initial` | no | `"resolved"` | Wait for the first exact result, or use `"native"` to show source text before automatic cooperative calculation |
+| `resize` | no | `"immediate"` | Synchronous updates, or `"settled"` for cooperative work and stable-width application |
+| `mode` | no | — | Deprecated legacy `"precise"` / `"progressive"`; cannot be combined with `initial` or `resize` |
 | `ref` | no | — | `HTMLElement` ref shared with the child |
 
 ```tsx
-<SemanticWrap mode="progressive" model={enTitleModel}>
+<SemanticWrap initial="native" resize="settled" model={enTitleModel}>
   <h1>{title}</h1>
 </SemanticWrap>
 ```
 
-Both modes measure in an invisible DOM copy. Precise temporarily renders the unchanged source
-during resize, then atomically applies the completed result for the latest width. Progressive
-retains its existing synchronous resize selection. A hook selection can be `null` while a
-precise resize is pending; this represents native rendering, not hidden text.
+All combinations measure in an invisible DOM copy. Resolved-first temporarily uses zero
+opacity until the first selection. Native-first allows the source to paint, then automatically
+calculates in approximately 4 ms slices; it does not wait for a resize or an extra 100 ms.
+Settled updates show source text while calculating, cancel obsolete work, and apply only the
+latest completed result after approximately 100 ms of stable width. This is not a hard task
+deadline or a guarantee of completion within 100 ms. Text changes restart first display;
+font/style changes use the update policy. At the same text and measurement conditions,
+model/strategy reference changes retain the displayed result while revalidating. Changed
+results are applied; equivalent results do not trigger another render. Stable references
+avoid redundant calculation but are not required for correctness.
+
+`useSemanticWrap` accepts the same two options. Its selection/diagnostics can be `null` during
+pending work; it never hides text or modifies the caller's DOM. Visibility remains caller-owned.
+
+**Migration:** legacy `mode="precise"` means `resolved` + `immediate`. Legacy
+`mode="progressive"` still waits for the first viewport/element resize before activation,
+unlike the new automatic `initial="native"`. Both are deprecated. The interim cooperative
+precise behavior introduced in commit `57f73fd` now requires explicit `resize="settled"`.
 
 #### Chakra UI
 
@@ -454,13 +465,15 @@ Options:
 | `model` | yes | — | Phrase model used to create boundary candidates |
 | `strategy` | no | default strategy | Aggregation, calculation, and selection rules |
 | `diagnostics` | no | `false` | Whether to include intermediate pipeline results |
+| `initial` | no | `"resolved"` | Synchronous initial calculation; native automatically calculates after a paint opportunity |
+| `resize` | no | `"immediate"` | Synchronous updates; settled uses cooperative stable-width updates |
 
 Output: `UseSemanticWrapResult`
 
 | Field | Type | Description |
 | --- | --- | --- |
 | `ref` | `(element: HTMLElement \| null) => void` | Callback ref for the measured element |
-| `selection` | `LineBreakSelection \| null` | `null` before measurement; otherwise the selected result |
+| `selection` | `LineBreakSelection \| null` | `null` before measurement or during pending text/geometry work; retains the previous result during reference-only revalidation |
 | `diagnostics` | `LineBreakDiagnostics \| null` | `null` unless requested and measurement has completed |
 
 The hook does not alter the target element's children or CSS.
