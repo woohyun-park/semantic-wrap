@@ -3,7 +3,6 @@ import {
   Fragment,
   cloneElement,
   isValidElement,
-  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -43,7 +42,14 @@ import {
 
 const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+export type SemanticWrapInitial = "resolved" | "native";
+export type SemanticWrapResize = "immediate" | "settled";
+
 export interface UseSemanticWrapOptions {
+  /** Show the first exact result (default), or show native text before cooperative calculation. */
+  initial?: SemanticWrapInitial;
+  /** Update synchronously (default), or cooperate and wait for a stable width. */
+  resize?: SemanticWrapResize;
   text: string;
   model: PhraseModel;
   strategy?: LineBreakStrategy;
@@ -57,6 +63,7 @@ export interface UseSemanticWrapResult {
 }
 
 type Resolution = LineBreakSelection | LineBreakSelectionWithDiagnostics;
+/** @deprecated Use initial and resize. Progressive retains its legacy resize-triggered activation. */
 export type SemanticWrapMode = "precise" | "progressive";
 
 function hasDiagnostics(
@@ -90,6 +97,8 @@ function equalResolution(left: Resolution | null, right: Resolution): boolean {
     left.overflow === right.overflow &&
     left.breaks.length === right.breaks.length &&
     left.breaks.every((offset, index) => offset === right.breaks[index]) &&
+    left.lines.length === right.lines.length &&
+    left.lines.every((line, index) => line === right.lines[index]) &&
     left.widths.length === right.widths.length &&
     left.widths.every((width, index) => width === right.widths[index]) &&
     equalSelectedCandidates(left, right) &&
@@ -98,154 +107,188 @@ function equalResolution(left: Resolution | null, right: Resolution): boolean {
   );
 }
 
+interface PublishedResult {
+  text: string;
+  element: HTMLElement;
+  selection: Resolution | null;
+  ready: boolean;
+}
+
+interface CalculationContext {
+  text: string;
+  element: HTMLElement;
+  initial: SemanticWrapInitial;
+  resize: SemanticWrapResize;
+  legacyProgressive: boolean;
+  width: number;
+  style: string;
+  update: boolean;
+  lastChange: number;
+  painted: boolean;
+}
+
 function useSemanticWrapEngine(
   options: UseSemanticWrapOptions,
-  mode: SemanticWrapMode,
+  legacyProgressive = false,
 ): UseSemanticWrapResult & { ready: boolean } {
+  const { initial = "resolved", resize = "immediate" } = options;
+  if (!["resolved", "native"].includes(initial)) {
+    throw new Error('SemanticWrap initial must be "resolved" or "native"');
+  }
+  if (!["immediate", "settled"].includes(resize)) {
+    throw new Error('SemanticWrap resize must be "immediate" or "settled"');
+  }
   const [element, setElement] = useState<HTMLElement | null>(null);
   const plan = useMemo(
-    () =>
-      createLineBreakPlan({
-        text: options.text,
-        model: options.model,
-        strategy: options.strategy,
-      }),
+    () => createLineBreakPlan({ text: options.text, model: options.model, strategy: options.strategy }),
     [options.model, options.strategy, options.text],
   );
-  const [resolutionState, setResolutionState] = useState<Resolution | null>(null);
-  const resolutionRef = useRef<Resolution | null>(null);
-  const readyTextRef = useRef<string | null>(null);
-  const progressiveActiveRef = useRef(mode === "precise");
-  const nativeLayoutMeasurementCacheRef = useRef<NativeLayoutMeasurementCache | null>(null);
-  if (nativeLayoutMeasurementCacheRef.current === null) {
-    nativeLayoutMeasurementCacheRef.current = createNativeLayoutMeasurementCache();
-  }
-  const nativeLayoutMeasurementCache = nativeLayoutMeasurementCacheRef.current;
-  const textMeasurementCacheRef = useRef<TextMeasurementCache | null>(null);
-  if (textMeasurementCacheRef.current === null) {
-    textMeasurementCacheRef.current = createTextMeasurementCache();
-  }
-  const textMeasurementCache = textMeasurementCacheRef.current;
-
-  const measure = useCallback(
-    (target: HTMLElement): Resolution | null => {
-      const width = contentWidth(target);
-      if (!Number.isFinite(width) || width <= 0) return null;
-      const measurer = createTextMeasurer(target, textMeasurementCache, options.text);
-      try {
-        const input = {
-          maxWidth: width,
-          measureText: measurer.measureText,
-          measureTexts: measurer.measureTexts,
-          cacheKey: textMeasurementCache.metricKey,
-          nativeLayout: readNativeLayout(target, options.text, nativeLayoutMeasurementCache),
-        };
-        return options.diagnostics
-          ? plan.select({ ...input, diagnostics: true })
-          : plan.select(input);
-      } finally {
-        measurer.dispose();
-      }
-    },
-    [nativeLayoutMeasurementCache, options.diagnostics, options.text, plan, textMeasurementCache],
-  );
-
-  const measureAndCommit = useCallback(
-    (target: HTMLElement, synchronous: boolean): void => {
-      const next = measure(target);
-      if (!next) return;
-      if (equalResolution(resolutionRef.current, next)) return;
-      resolutionRef.current = next;
-      readyTextRef.current = next.text;
-      if (synchronous) {
-        flushSync(() => setResolutionState(next));
-      } else {
-        setResolutionState(next);
-      }
-    },
-    [measure],
-  );
+  // Jobs belong to an effect lifetime; visible results survive reference-only
+  // input changes. Memoization is an optimization, never a correctness requirement.
+  const [state, setState] = useState<PublishedResult | null>(null);
+  const publishedRef = useRef<PublishedResult | null>(null);
+  const calculationRef = useRef<CalculationContext | null>(null);
+  const observationPausedRef = useRef(false);
+  const legacyRef = useRef({ enabled: legacyProgressive, activated: false });
+  const nativeCacheRef = useRef<NativeLayoutMeasurementCache | null>(null);
+  if (nativeCacheRef.current === null) nativeCacheRef.current = createNativeLayoutMeasurementCache();
+  const textCacheRef = useRef<TextMeasurementCache | null>(null);
+  if (textCacheRef.current === null) textCacheRef.current = createTextMeasurementCache();
+  const nativeCache = nativeCacheRef.current;
+  const textCache = textCacheRef.current;
 
   useBrowserLayoutEffect(() => {
+    if (legacyRef.current.enabled !== legacyProgressive) {
+      legacyRef.current = { enabled: legacyProgressive, activated: false };
+    }
     if (!element) {
-      invalidateNativeLayoutMeasurementCache(nativeLayoutMeasurementCache);
-      invalidateTextMeasurementCache(textMeasurementCache);
-      resolutionRef.current = null;
-      setResolutionState(null);
+      publishedRef.current = null;
+      calculationRef.current = null;
+      setState(null);
       return;
     }
     const target = element;
-    const defaultView = target.ownerDocument.defaultView;
-    if (!defaultView) return;
-    const view = defaultView;
-
+    const view = target.ownerDocument.defaultView;
+    if (!view) return;
     let active = true;
+    let enabled = !legacyProgressive || legacyRef.current.activated;
     let workTimer: number | undefined;
     let settleTimer: number | undefined;
+    let frameId: number | undefined;
     let job: Generator<void, Resolution | null, void> | undefined;
     let completed: Resolution | null = null;
-    let lastChange = 0;
-    let resizing = false;
     let measuredWidth = contentWidth(target);
     let measuredStyle = measurementStyleSignature(target);
-    let preciseActive = mode === "precise" || progressiveActiveRef.current;
-    progressiveActiveRef.current = preciseActive;
-    if (!preciseActive && resolutionRef.current !== null) {
-      resolutionRef.current = null;
-      setResolutionState(null);
-    }
-    if (preciseActive) measureAndCommit(target, false);
+    const previousCalculation = calculationRef.current;
+    const sameLifecycle = previousCalculation?.element === target &&
+      previousCalculation.text === options.text && previousCalculation.initial === initial &&
+      previousCalculation.resize === resize && previousCalculation.legacyProgressive === legacyProgressive;
+    const continuation = sameLifecycle &&
+      Math.abs(previousCalculation.width - measuredWidth) < 0.01 && previousCalculation.style === measuredStyle
+      ? previousCalculation : null;
+    const previousResult = publishedRef.current;
+    let current = previousResult?.element === target && previousResult.text === options.text
+      ? previousResult.selection : null;
+    let lastChange = 0;
+    let waitForStability = false;
+    // A layout effect (or fonts.ready) must not start native-first work before paint.
+    let painted = sameLifecycle ? previousCalculation.painted : initial !== "native" || legacyProgressive;
+    let pending = false;
+    let pendingUpdate = false;
+    let observer: ResizeObserver | undefined;
+    let deliveringResize = false;
+    let reobserveFrame: number | undefined;
 
-    function cancelWork(): void {
-      if (workTimer !== undefined) view.clearTimeout(workTimer);
-      if (settleTimer !== undefined) view.clearTimeout(settleTimer);
-      workTimer = settleTimer = undefined;
+    function observeNextFrame(): void {
+      reobserveFrame = view!.requestAnimationFrame(() => {
+        reobserveFrame = undefined;
+        if (!active) return;
+        observationPausedRef.current = false;
+        observer!.observe(target);
+      });
+    }
+
+    function clearPending(): void {
+      if (workTimer !== undefined) view!.clearTimeout(workTimer);
+      if (settleTimer !== undefined) view!.clearTimeout(settleTimer);
+      if (frameId !== undefined) view!.cancelAnimationFrame(frameId);
+      workTimer = settleTimer = frameId = undefined;
       job?.return(null);
       job = undefined;
       completed = null;
+      pending = false;
     }
 
-    function commitCompleted(): void {
-      if (!active || !completed) return;
-      const delay = 100 - (performance.now() - lastChange);
-      if (delay > 0) {
-        settleTimer = view.setTimeout(commitCompleted, delay);
-        return;
+    function publish(selection: Resolution | null, synchronous: boolean): void {
+      if (!active) return;
+      const previous = publishedRef.current;
+      const sameTarget = previous?.element === target && previous.text === options.text;
+      current = selection;
+      const ready = selection !== null || (sameTarget && previous.ready);
+      if (sameTarget && previous.ready === ready && (selection === null
+        ? previous.selection === null : equalResolution(previous.selection, selection))) return;
+      const next: PublishedResult = { text: options.text, element: target, selection, ready };
+      publishedRef.current = next;
+      // Our <br> updates change height inside an observer delivery. Suppress only
+      // that self-notification; width changes during the gap are checked on reobserve.
+      if (deliveringResize && observer) {
+        observationPausedRef.current = true;
+        observer.unobserve(target);
+        observeNextFrame();
       }
-      // ResizeObserver delivery may lag behind the latest style change.
-      const width = contentWidth(target);
-      const style = measurementStyleSignature(target);
-      if (Math.abs(width - measuredWidth) >= 0.01 || style !== measuredStyle) {
-        measuredWidth = width;
-        measuredStyle = style;
-        scheduleResize();
-        return;
-      }
-      const next = completed;
-      completed = null;
-      resizing = false;
-      resolutionRef.current = next;
-      readyTextRef.current = next.text;
-      flushSync(() => setResolutionState(next));
+      const update = () => setState(next);
+      if (synchronous) flushSync(update);
+      else update();
     }
 
-    function* resolveResize(): Generator<void, Resolution | null, void> {
-      if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) return null;
-      const measurer = createTextMeasurer(target, textMeasurementCache, options.text);
-      try {
-        const nativeLayout = readNativeLayout(target, options.text, nativeLayoutMeasurementCache);
-        yield;
-        return yield* plan.selectSteps({
+    function input() {
+      const measurer = createTextMeasurer(target, textCache, options.text);
+      return {
+        measurer,
+        selection: {
           maxWidth: measuredWidth,
           measureText: measurer.measureText,
           measureTexts: measurer.measureTexts,
-          cacheKey: textMeasurementCache.metricKey,
-          nativeLayout,
+          cacheKey: textCache.metricKey,
+          nativeLayout: readNativeLayout(target, options.text, nativeCache),
           diagnostics: options.diagnostics,
-        });
-      } finally {
-        measurer.dispose();
+        },
+      };
+    }
+
+    function resolveSync(synchronous: boolean): void {
+      if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) return;
+      const { measurer, selection } = input();
+      try { publish(plan.select(selection), synchronous); }
+      finally { measurer.dispose(); }
+    }
+
+    function* resolveSteps(): Generator<void, Resolution, void> {
+      const { measurer, selection } = input();
+      try {
+        yield;
+        return yield* plan.selectSteps(selection);
+      } finally { measurer.dispose(); }
+    }
+
+    function commitCompleted(): void {
+      settleTimer = undefined;
+      if (!active || !completed) return;
+      const width = contentWidth(target);
+      const style = measurementStyleSignature(target);
+      if (Math.abs(width - measuredWidth) >= 0.01 || style !== measuredStyle) {
+        requestCalculation(true, true);
+        return;
       }
+      const delay = waitForStability ? 100 - (performance.now() - lastChange) : 0;
+      if (delay > 0) {
+        settleTimer = view!.setTimeout(commitCompleted, delay);
+        return;
+      }
+      const result = completed;
+      completed = null;
+      pending = false;
+      publish(result, true);
     }
 
     function runSlice(): void {
@@ -253,120 +296,149 @@ function useSemanticWrapEngine(
       if (!active || !job) return;
       const deadline = performance.now() + 4;
       do {
-        const next = job.next();
-        if (next.done) {
+        const step = job.next();
+        if (step.done) {
           job = undefined;
-          completed = next.value;
+          completed = step.value;
           commitCompleted();
           return;
         }
       } while (performance.now() < deadline);
-      workTimer = view.setTimeout(runSlice, 0);
+      workTimer = view!.setTimeout(runSlice, 0);
     }
 
-    function scheduleResize(): void {
-      cancelWork();
-      lastChange = performance.now();
-      resizing = true;
-      // A null selection during resize means source/native rendering, not hidden text.
-      if (resolutionRef.current !== null) {
-        resolutionRef.current = null;
-        flushSync(() => setResolutionState(null));
-      }
-      job = resolveResize();
-      workTimer = view.setTimeout(runSlice, 0);
-    }
-
-    function activatePrecise(nextWidth: number): void {
-      if (!active || preciseActive) return;
-      if (Number.isFinite(nextWidth) && nextWidth > 0) measuredWidth = nextWidth;
-      preciseActive = true;
-      progressiveActiveRef.current = true;
-      view.removeEventListener("resize", handleViewportResize);
-      if (mode === "precise") scheduleResize();
-      else measureAndCommit(target, true);
-    }
-
-    function handleViewportResize(): void {
-      activatePrecise(contentWidth(target));
-    }
-
-    if (!preciseActive) {
-      view.addEventListener("resize", handleViewportResize, { once: true });
-    }
-
-    const observer = new view.ResizeObserver(() => {
+    function startWork(): void {
       if (!active) return;
-      const nextWidth = contentWidth(target);
-      if (!Number.isFinite(nextWidth) || nextWidth <= 0) return;
-      if (Math.abs(nextWidth - measuredWidth) < 0.01) return;
-      measuredWidth = nextWidth;
-      if (!preciseActive) {
-        activatePrecise(nextWidth);
+      if (pendingUpdate && resize === "immediate") {
+        pending = false;
+        resolveSync(true);
+      } else {
+        job = resolveSteps();
+        workTimer = view!.setTimeout(runSlice, 0);
+      }
+    }
+
+    function requestCalculation(
+      update: boolean,
+      synchronous: boolean,
+      resume: CalculationContext | null = null,
+    ): void {
+      clearPending();
+      measuredWidth = contentWidth(target);
+      measuredStyle = measurementStyleSignature(target);
+      if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) {
+        publish(null, synchronous);
         return;
       }
-      if (mode === "precise") scheduleResize();
-      else measureAndCommit(target, true);
+      waitForStability = update && resize === "settled";
+      lastChange = resume?.lastChange ?? performance.now();
+      pendingUpdate = update;
+      const context: CalculationContext = {
+        text: options.text, element: target, initial, resize, legacyProgressive,
+        width: measuredWidth, style: measuredStyle, update, lastChange, painted,
+      };
+      calculationRef.current = context;
+      if (painted && ((update && resize === "immediate") ||
+        (!update && (initial === "resolved" || legacyProgressive)))) {
+        resolveSync(synchronous);
+        return;
+      }
+      pending = true;
+      // Revalidate changed callbacks without flashing back to native text. A real
+      // geometry/text change still follows the requested first-display/update policy.
+      if (!resume || current === null) publish(null, synchronous);
+      if (!active) return; // Publishing may synchronously replace this effect.
+      if (!painted) {
+        // Two frames allow a native frame even when React flushes passive effects early.
+        frameId = view!.requestAnimationFrame(() => {
+          frameId = view!.requestAnimationFrame(() => {
+            frameId = undefined;
+            painted = true;
+            context.painted = true;
+            workTimer = view!.setTimeout(startWork, 0);
+          });
+        });
+      } else startWork();
+    }
+
+    function activateLegacy(): void {
+      if (!active || enabled) return;
+      enabled = true;
+      legacyRef.current.activated = true;
+      view!.removeEventListener("resize", activateLegacy);
+      requestCalculation(false, true);
+    }
+    if (enabled) requestCalculation(continuation?.update ?? sameLifecycle, false, continuation);
+    else {
+      publish(null, false);
+      view.addEventListener("resize", activateLegacy);
+    }
+
+    observer = new view.ResizeObserver(() => {
+      if (!active) return;
+      const width = contentWidth(target);
+      if (!Number.isFinite(width) || width <= 0) return;
+      if (Math.abs(width - measuredWidth) < 0.01) return;
+      deliveringResize = true;
+      try {
+        if (!enabled) activateLegacy();
+        else requestCalculation(true, true);
+      } finally { deliveringResize = false; }
     });
-    observer.observe(target);
+    // An inline input can restart this effect inside flushSync during an observer
+    // delivery. Preserve the pause across that restart (not only the old observer).
+    if (observationPausedRef.current) observeNextFrame();
+    else observer.observe(target);
 
     const mutationObserver = new view.MutationObserver(() => {
-      if (!active || !preciseActive) return;
+      if (!active || !enabled) return;
       const width = contentWidth(target);
       const style = measurementStyleSignature(target);
       if (Math.abs(width - measuredWidth) < 0.01 && style === measuredStyle) return;
-      measuredStyle = style;
-      if (mode === "precise") {
-        measuredWidth = width;
-        scheduleResize();
-      } else measureAndCommit(target, true);
+      requestCalculation(true, true);
     });
-    mutationObserver.observe(target, {
-      attributes: true,
-      attributeFilter: ["class", "style"],
-    });
+    mutationObserver.observe(target, { attributes: true, attributeFilter: ["class", "style"] });
 
     const fonts = target.ownerDocument.fonts;
-    const remeasureAfterFontLoad = () => {
-      if (!active || !preciseActive) return;
-      invalidateNativeLayoutMeasurementCache(nativeLayoutMeasurementCache);
-      invalidateTextMeasurementCache(textMeasurementCache);
-      if (mode === "precise" && resizing) scheduleResize();
-      else measureAndCommit(target, true);
-    };
-    void fonts.ready.then(remeasureAfterFontLoad);
-    fonts.addEventListener("loadingdone", remeasureAfterFontLoad);
+    function fontsChanged(): void {
+      if (!active || !enabled) return;
+      // Dispose an iterator before invalidating the probes it owns.
+      const wasUpdate = pending ? pendingUpdate : current !== null;
+      clearPending();
+      invalidateNativeLayoutMeasurementCache(nativeCache);
+      invalidateTextMeasurementCache(textCache);
+      requestCalculation(wasUpdate, true);
+    }
+    // No redundant resolved-font callback: it could turn native-first startup into an update.
+    if (fonts.status === "loading") void fonts.ready.then(fontsChanged);
+    fonts.addEventListener("loadingdone", fontsChanged);
 
     return () => {
       active = false;
-      cancelWork();
-      view.removeEventListener("resize", handleViewportResize);
-      observer.disconnect();
+      clearPending();
+      view.removeEventListener("resize", activateLegacy);
+      if (reobserveFrame !== undefined) view.cancelAnimationFrame(reobserveFrame);
+      observer!.disconnect();
       mutationObserver.disconnect();
-      fonts.removeEventListener("loadingdone", remeasureAfterFontLoad);
-      invalidateNativeLayoutMeasurementCache(nativeLayoutMeasurementCache);
-      invalidateTextMeasurementCache(textMeasurementCache);
+      fonts.removeEventListener("loadingdone", fontsChanged);
+      invalidateNativeLayoutMeasurementCache(nativeCache);
+      invalidateTextMeasurementCache(textCache);
     };
-  }, [element, measureAndCommit, mode, nativeLayoutMeasurementCache, options.diagnostics, options.text, plan, textMeasurementCache]);
+  }, [element, initial, resize, legacyProgressive, nativeCache, textCache, plan, options.text, options.diagnostics]);
 
-  const resolution =
-    element &&
-    resolutionState?.text === options.text &&
-    (mode === "precise" || progressiveActiveRef.current)
-      ? resolutionState
-      : null;
-
+  const valid = state?.text === options.text && state.element === element;
+  const selection = valid ? state.selection : null;
   return {
-    ready: readyTextRef.current === options.text,
     ref: setElement,
-    selection: resolution,
-    diagnostics: resolution && hasDiagnostics(resolution) ? resolution.diagnostics : null,
+    selection,
+    diagnostics: selection && hasDiagnostics(selection) ? selection.diagnostics : null,
+    ready: valid && state.ready,
   };
 }
 
-/** Measures a plain-text element and returns a headless precise line-break decision. */
+/** Headless exact selection; initial/resize control scheduling, not element visibility. */
 export function useSemanticWrap(options: UseSemanticWrapOptions): UseSemanticWrapResult {
-  return useSemanticWrapEngine(options, "precise");
+  return useSemanticWrapEngine(options);
 }
 
 interface SemanticChildProps {
@@ -375,14 +447,26 @@ interface SemanticChildProps {
   style?: CSSProperties;
 }
 
-export interface SemanticWrapProps
-  extends Omit<UseSemanticWrapOptions, "text" | "diagnostics"> {
+interface SemanticWrapBaseProps
+  extends Omit<UseSemanticWrapOptions, "text" | "diagnostics" | "initial" | "resize"> {
   children: ReactElement<SemanticChildProps>;
-  /** Precise keeps exact-first rendering and settles resize results cooperatively. */
-  mode?: SemanticWrapMode;
   /** Receives the same HTMLElement ref as the child. React 19 only. */
   ref?: Ref<HTMLElement>;
 }
+
+export type SemanticWrapProps = SemanticWrapBaseProps & (
+  | {
+    initial?: SemanticWrapInitial;
+    resize?: SemanticWrapResize;
+    mode?: never;
+  }
+  | {
+    /** @deprecated Use initial/resize. Progressive preserves legacy first-resize activation. */
+    mode: SemanticWrapMode;
+    initial?: never;
+    resize?: never;
+  }
+);
 
 function attachRef(
   ref: Ref<HTMLElement> | undefined,
@@ -440,17 +524,23 @@ function renderWithBreaks(text: string, breaks: readonly number[]): ReactNode {
 
 /**
  * Applies selected breaks to exactly one plain-text child without adding a DOM wrapper.
- * Precise mode keeps the SSR text transparent until the first exact selection is ready.
+ * Resolved-first keeps SSR text transparent until the first exact selection is ready.
  */
 export function SemanticWrap({
   children,
-  mode = "precise",
+  mode,
+  initial,
+  resize,
   ref,
   ...options
 }: SemanticWrapProps): ReactElement {
-  if (!["precise", "progressive"].includes(mode)) {
+  if (mode !== undefined && !["precise", "progressive"].includes(mode)) {
     throw new Error('SemanticWrap mode must be "precise" or "progressive"');
   }
+  if (mode !== undefined && (initial !== undefined || resize !== undefined)) {
+    throw new Error("SemanticWrap mode cannot be combined with initial or resize");
+  }
+  const resolvedInitial = mode === "progressive" ? "native" : initial ?? "resolved";
   const child = Children.only(children);
   if (!isValidElement<SemanticChildProps>(child) || child.type === Fragment) {
     throw new Error("SemanticWrap requires exactly one non-Fragment React element");
@@ -460,7 +550,9 @@ export function SemanticWrap({
     throw new Error("SemanticWrap supports plain text children only; use useSemanticWrap for markup");
   }
   const text = String(source);
-  const result = useSemanticWrapEngine({ text, ...options }, mode);
+  const result = useSemanticWrapEngine(
+    { text, ...options, initial: resolvedInitial, resize }, mode === "progressive",
+  );
   const childRef = child.props.ref;
   // Ref callback identity must stay stable so cloning does not detach the measured element.
   const mergedRef = useMemo(
@@ -471,7 +563,7 @@ export function SemanticWrap({
     result.selection?.applied === true
       ? renderWithBreaks(text, result.selection.breaks)
       : text;
-  const pendingPreciseSelection = mode === "precise" && !result.ready;
+  const pendingPreciseSelection = resolvedInitial === "resolved" && !result.ready;
   const style = pendingPreciseSelection
     ? { ...child.props.style, opacity: 0 }
     : child.props.style;

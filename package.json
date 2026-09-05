@@ -25,6 +25,8 @@
     "bench:batch": "bun run site:build && SEMANTIC_WRAP_BATCH_BENCHMARK=1 playwright test tests/browser/batched-layouts.spec.ts --project=chromium --workers=1 --reporter=line",
     "bench:resize": "bun run site:build && SEMANTIC_WRAP_RESIZE_BENCHMARK=1 playwright test tests/browser/resize-performance.spec.ts --project=chromium --workers=1 --reporter=line",
     "record:resize": "bun run site:build && SEMANTIC_WRAP_RESIZE_VIDEO=1 playwright test tests/browser/resize-performance.spec.ts --project=chromium --workers=1 --reporter=line",
+    "bench:scheduling": "bun run site:build && SEMANTIC_WRAP_OPTIONS_BENCHMARK=1 playwright test tests/browser/scheduling-performance.spec.ts --project=chromium --workers=1 --reporter=line",
+    "record:scheduling": "bun run site:build && SEMANTIC_WRAP_OPTIONS_VIDEO=1 playwright test tests/browser/scheduling-performance.spec.ts --project=chromium --workers=1 --reporter=line",
     "changeset": "changeset",
     "ai-docs:check": "bun scripts/sync-ai-docs.ts --check",
     "ai-docs:sync": "bun scripts/sync-ai-docs.ts",

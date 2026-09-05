@@ -1,5 +1,5 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { StrictMode, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import {
   createBudouxPredictor,
   createLineBreakStrategy,
@@ -15,6 +15,7 @@ import { koTitleModel } from "../../packages/ko/src/index.js";
 import { installNearbyBenchmark } from "./nearby-benchmark.js";
 import { installBatchWidthChecks } from "./batch-widths.js";
 import { ResizeFixture } from "./resize-fixture.js";
+import { SchedulingFixture, schedulingConfig } from "./scheduling-fixture.js";
 
 installBatchWidthChecks();
 
@@ -431,6 +432,9 @@ function KoreanAppliedFixture() {
 }
 
 function App() {
+  if (new URLSearchParams(location.search).has("scheduling")) {
+    return <SchedulingFixture config={schedulingConfig(new URLSearchParams(location.search))} />;
+  }
   if (new URLSearchParams(location.search).has("resize-demo")) return <ResizeFixture longText={LONG_BENCHMARK_TEXT} />;
   const search = new URLSearchParams(window.location.search);
   if (search.has("nearby-react")) return <NearbyReactFixture />;
@@ -450,7 +454,7 @@ function App() {
       <ProgressiveFixture />
 
       <div id="atomic-container" style={{ width: 200 }}>
-        <SemanticWrap model={model} strategy={switchingStrategy}>
+        <SemanticWrap model={model} strategy={switchingStrategy} resize="settled">
           <h2 id="atomic-title" className="title" style={{ width: "100%" }}>
             하나 둘 셋
           </h2>
@@ -471,4 +475,6 @@ function App() {
   );
 }
 
-createRoot(document.querySelector("#root")!).render(<App />);
+const app = new URLSearchParams(location.search).has("strict") ? <StrictMode><App /></StrictMode> : <App />;
+if (new URLSearchParams(location.search).has("hydrate")) hydrateRoot(document.querySelector("#root")!, app);
+else createRoot(document.querySelector("#root")!).render(app);

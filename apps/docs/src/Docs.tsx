@@ -191,7 +191,7 @@ const diagnosticsCode = `const result = selectLineBreaks(
 console.log(result.diagnostics.predictions);
 console.log(result.diagnostics.candidates);`;
 
-const progressiveCode = `<SemanticWrap mode="progressive" model={koTitleModel}>
+const progressiveCode = `<SemanticWrap initial="native" resize="settled" model={koTitleModel}>
   <h1>{title}</h1>
 </SemanticWrap>`;
 
@@ -306,7 +306,7 @@ const englishDiagnosticsCode = `const result = selectLineBreaks(input, { diagnos
 console.log(result.diagnostics.predictions);
 console.log(result.diagnostics.candidates);`;
 
-const englishProgressiveCode = `<SemanticWrap mode="progressive" model={enTitleModel}>
+const englishProgressiveCode = `<SemanticWrap initial="native" resize="settled" model={enTitleModel}>
   <h1>{title}</h1>
 </SemanticWrap>`;
 
@@ -841,7 +841,7 @@ function IntroductionArticle() {
         <p><code>@semantic-wrap/react</code>는 React와 React DOM 19 이상을 지원합니다. Core나 모델만 사용하는 환경에는 React가 필요하지 않으며 세 패키지는 모두 ESM 전용입니다.</p>
         <DocsSubheading>React에서 사용하기</DocsSubheading>
         <CodeBlock label="Title.tsx" language="tsx">{reactCode}</CodeBlock>
-        <p><code>SemanticWrap</code>은 별도 엘리먼트를 추가하지 않습니다. 기본 precise 모드는 SSR 원문을 HTML에 유지하되 최초의 정확한 선택이 준비될 때까지 opacity를 0으로 둔 뒤 결과를 표시합니다. progressive 모드는 SSR 원문을 변경하지 않고 첫 viewport 또는 element resize부터 precise 선택을 시작합니다.</p>
+        <p><code>SemanticWrap</code>은 별도 엘리먼트를 추가하지 않습니다. 최초 표시(initial)와 리사이즈 처리(resize)를 독립적으로 선택합니다. 기본값 resolved + immediate는 최초 계산 후 표시하고 너비 변경에 즉시 반응합니다. native + settled는 원문부터 표시하고 자동 분할 계산하며, 리사이즈 중에는 너비가 안정된 뒤 최신 결과를 적용합니다. 네 조합의 최종 정확도는 같습니다.</p>
       </DocsSection>
 
       <DocsSection id="how-it-works" index="03" title="동작 방식">
@@ -890,6 +890,8 @@ function IntroductionArticle() {
             <tr><td><code>nativeLayout</code></td><td>아니요</td><td>없음</td><td>비교할 기존 줄바꿈. 마지막 줄을 제외한 UTF-16 offset을 오름차순으로 전달</td></tr>
             <tr><td><code>strategy</code></td><td>아니요</td><td>기본 strategy</td><td>후보 통합, 계산, 최종 선택 규칙</td></tr>
             <tr><td><code>diagnostics</code></td><td>아니요</td><td><code>false</code></td><td>단계별 중간 결과 포함 여부</td></tr>
+            <tr><td><code>initial</code></td><td>아니요</td><td><code>resolved</code></td><td>최초 동기 계산. native는 표시 기회 후 자동 분할 계산</td></tr>
+            <tr><td><code>resize</code></td><td>아니요</td><td><code>immediate</code></td><td>즉시 업데이트 또는 settled 안정 후 적용</td></tr>
           </tbody>
         </table></DocsTable>
         <p><code>nativeLayout</code>을 전달하면 계산된 후보와 함께 평가하며 생략하면 계산된 후보 안에서만 선택합니다. React API는 브라우저가 실제로 나눈 줄을 자동으로 전달합니다. 기본 selector는 native가 overflow일 때 너비 안에 들어오는 계산 결과를 허용하고, 그 외에는 줄 수가 같고 <code>modelCost</code>가 더 낮은 후보만 native를 대체할 수 있습니다.</p>
@@ -982,12 +984,15 @@ function IntroductionArticle() {
             <tr><td><code>children</code></td><td>예</td><td>—</td><td>ref를 실제 HTMLElement로 전달하는 하나의 plain-text React 엘리먼트</td></tr>
             <tr><td><code>model</code></td><td>예</td><td>—</td><td>줄바꿈 후보를 만드는 모델</td></tr>
             <tr><td><code>strategy</code></td><td>아니요</td><td>기본 strategy</td><td>후보 통합, 계산, 선택 규칙</td></tr>
-            <tr><td><code>mode</code></td><td>아니요</td><td><code>precise</code></td><td>precise 또는 progressive 측정 모드</td></tr>
+            <tr><td><code>initial</code></td><td>아니요</td><td><code>resolved</code></td><td>계산 후 표시. native는 원문 표시 후 자동 분할 계산</td></tr>
+            <tr><td><code>resize</code></td><td>아니요</td><td><code>immediate</code></td><td>즉시 적용. settled는 약 100ms 안정 후 완료된 결과 적용</td></tr>
+            <tr><td><code>mode</code></td><td>아니요</td><td>—</td><td>Deprecated. precise/progressive 호환용, 새 옵션과 혼용 불가</td></tr>
             <tr><td><code>ref</code></td><td>아니요</td><td>—</td><td>자식과 함께 사용할 HTMLElement ref</td></tr>
           </tbody>
         </table></DocsTable>
-        <CodeBlock label="progressive.tsx" language="tsx">{progressiveCode}</CodeBlock>
-        <p>두 모드 모두 보이지 않는 DOM copy에서 측정하고 ResizeObserver 안에서 최종 결과만 동기적으로 반영합니다. 측정을 위해 visible element를 비우거나 원문으로 되돌리지 않습니다.</p>
+        <CodeBlock label="scheduling.tsx" language="tsx">{progressiveCode}</CodeBlock>
+        <p>모든 조합은 보이지 않는 DOM copy에서 측정합니다. native는 리사이즈 없이 자동 계산하고, settled는 대기 중 원문을 보여주며 약 100ms 동안 너비가 안정되고 계산이 완료되면 결과를 적용합니다. 100ms 내 완료를 보장하지는 않습니다. 기존 mode는 deprecated이며 precise는 resolved + immediate, progressive는 첫 리사이즈부터 계산하는 호환 동작을 유지합니다.</p>
+        <p>같은 텍스트와 측정 조건에서 모델·전략 참조만 바뀌면 기존 표시를 유지하며 재검증하고, 결과가 달라질 때만 갱신합니다. 참조를 안정적으로 유지하면 중복 계산을 줄일 수 있지만 정상 동작의 필수 조건은 아닙니다.</p>
         <aside className="docs-note is-caution"><strong>Plain text만 지원합니다</strong><p>서로 다른 글꼴이나 markup이 필요하다면 <code>useSemanticWrap</code> 또는 Core API를 사용하세요.</p></aside>
       </DocsSection>
 
@@ -1020,7 +1025,7 @@ function IntroductionArticle() {
           <thead><tr><th>필드</th><th>타입</th><th>설명</th></tr></thead>
           <tbody>
             <tr><td><code>ref</code></td><td><code>(HTMLElement | null) =&gt; void</code></td><td>측정할 엘리먼트에 연결하는 callback ref</td></tr>
-            <tr><td><code>selection</code></td><td><code>LineBreakSelection | null</code></td><td>측정 전 null, 이후 선택 결과</td></tr>
+            <tr><td><code>selection</code></td><td><code>LineBreakSelection | null</code></td><td>최초 측정 전·텍스트나 측정 조건 변경에 따른 대기 중 null. 참조만 변경된 재검증에서는 기존 결과 유지</td></tr>
             <tr><td><code>diagnostics</code></td><td><code>LineBreakDiagnostics | null</code></td><td>진단을 요청하고 측정한 경우의 결과</td></tr>
           </tbody>
         </table></DocsTable>
@@ -1094,7 +1099,7 @@ function EnglishIntroductionArticle() {
         <p><code>@semantic-wrap/react</code> requires React and React DOM 19 or later. Core-only and model-only projects do not need React. All packages are ESM-only.</p>
         <DocsSubheading locale="en">Use it in React</DocsSubheading>
         <CodeBlock label="Title.tsx" language="tsx" locale="en">{englishReactCode}</CodeBlock>
-        <p><code>SemanticWrap</code> preserves its child element and adds no wrapper. Precise mode keeps SSR text in HTML and reveals the exact first selection when ready. Progressive mode leaves the initial SSR text untouched and starts precise selection on the first viewport or element resize.</p>
+        <p><code>SemanticWrap</code> preserves its child element and adds no wrapper. First display (initial) and resize scheduling (resize) are independent. Defaults resolved + immediate preserve exact-first display and synchronous updates. Native + settled shows source first, calculates automatically in cooperative slices, and applies resize results at a stable width. All four combinations preserve exact selection.</p>
       </DocsSection>
 
       <DocsSection id="how-it-works" index="03" locale="en" title="How it works">
@@ -1233,12 +1238,15 @@ function EnglishIntroductionArticle() {
             <tr><td><code>children</code></td><td>yes</td><td>—</td><td>One plain-text React element</td></tr>
             <tr><td><code>model</code></td><td>yes</td><td>—</td><td>Phrase model used to create candidates</td></tr>
             <tr><td><code>strategy</code></td><td>no</td><td>default strategy</td><td>Aggregation, calculation, and selection rules</td></tr>
-            <tr><td><code>mode</code></td><td>no</td><td><code>precise</code></td><td><code>precise</code> or <code>progressive</code> measurement</td></tr>
+            <tr><td><code>initial</code></td><td>no</td><td><code>resolved</code></td><td>Exact-first display; native shows source before automatic calculation</td></tr>
+            <tr><td><code>resize</code></td><td>no</td><td><code>immediate</code></td><td>Synchronous updates; settled applies completed work after about 100 ms of stable width</td></tr>
+            <tr><td><code>mode</code></td><td>no</td><td>—</td><td>Deprecated precise/progressive compatibility; cannot mix with new options</td></tr>
             <tr><td><code>ref</code></td><td>no</td><td>—</td><td>HTMLElement ref shared with the child</td></tr>
           </tbody>
         </table></DocsTable>
-        <CodeBlock label="progressive.tsx" language="tsx" locale="en">{englishProgressiveCode}</CodeBlock>
-        <p>Both modes measure in an invisible DOM copy and synchronously commit the final result from the resize observer. The visible element is never cleared or reset to raw text for measurement.</p>
+        <CodeBlock label="scheduling.tsx" language="tsx" locale="en">{englishProgressiveCode}</CodeBlock>
+        <p>All combinations measure in an invisible DOM copy. Native-first starts automatically without a resize. Settled updates show source while calculating and apply the latest result after about 100 ms of stable width and completed work; completion within 100 ms is not guaranteed. Legacy mode is deprecated: precise means resolved + immediate, while progressive retains first-resize activation.</p>
+        <p>At unchanged text and measurement conditions, new model/strategy references retain the displayed result while revalidating. Only changed results are published. Stable references avoid redundant calculation but are not required for correctness.</p>
         <aside className="docs-note is-caution"><strong>Plain text only</strong><p>For nested markup with different typography, use <code>useSemanticWrap</code> or Core with a matching <code>measureText</code> implementation.</p></aside>
       </DocsSection>
 
@@ -1262,6 +1270,8 @@ function EnglishIntroductionArticle() {
             <tr><td><code>model</code></td><td>yes</td><td>—</td><td>Phrase model used to create candidates</td></tr>
             <tr><td><code>strategy</code></td><td>no</td><td>default strategy</td><td>Aggregation, calculation, and selection rules</td></tr>
             <tr><td><code>diagnostics</code></td><td>no</td><td><code>false</code></td><td>Whether to return intermediate results</td></tr>
+            <tr><td><code>initial</code></td><td>no</td><td><code>resolved</code></td><td>Synchronous initial calculation, or automatic native-first work</td></tr>
+            <tr><td><code>resize</code></td><td>no</td><td><code>immediate</code></td><td>Synchronous updates, or cooperative settled updates</td></tr>
           </tbody>
         </table></DocsTable>
         <CodeBlock label="BreakPreview.tsx" language="tsx" locale="en">{englishHookCode}</CodeBlock>
@@ -1271,7 +1281,7 @@ function EnglishIntroductionArticle() {
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>ref</code></td><td><code>(HTMLElement | null) =&gt; void</code></td><td>Callback ref for the measured element</td></tr>
-            <tr><td><code>selection</code></td><td><code>LineBreakSelection | null</code></td><td>Selected result after measurement</td></tr>
+            <tr><td><code>selection</code></td><td><code>LineBreakSelection | null</code></td><td>Null before measurement or during pending text/geometry work; retains the previous result during reference-only revalidation</td></tr>
             <tr><td><code>diagnostics</code></td><td><code>LineBreakDiagnostics | null</code></td><td>Diagnostics after measurement when requested</td></tr>
           </tbody>
         </table></DocsTable>
