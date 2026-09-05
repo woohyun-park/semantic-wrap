@@ -1,27 +1,35 @@
 import type { BaselineLayout } from "@semantic-wrap/core";
 
 const MAX_CACHED_TEXT_WIDTHS = 128;
+const MAX_BATCH_PROBES = 64;
 
 export interface TextMeasurementCache {
+  metricKey: object;
   element: HTMLElement | null;
   sourceText: string;
   metricSignature: string;
   readonly widths: Map<string, number>;
   probe: HTMLSpanElement | null;
+  readonly batchProbes: HTMLSpanElement[];
 }
 
 export function createTextMeasurementCache(): TextMeasurementCache {
   return {
+    metricKey: {},
     element: null,
     sourceText: "",
     metricSignature: "",
     widths: new Map(),
     probe: null,
+    batchProbes: [],
   };
 }
 
 export function invalidateTextMeasurementCache(cache: TextMeasurementCache): void {
+  cache.metricKey = {};
   cache.probe?.remove();
+  for (const probe of cache.batchProbes) probe.remove();
+  cache.batchProbes.length = 0;
   cache.element = null;
   cache.sourceText = "";
   cache.metricSignature = "";
@@ -162,6 +170,12 @@ function cachedWidth(cache: TextMeasurementCache, text: string): number | undefi
   return width;
 }
 
+/** Geometry-affecting typography only; excludes our own pending opacity changes. */
+export function measurementStyleSignature(element: HTMLElement): string {
+  const view = element.ownerDocument.defaultView;
+  return view ? nativeLayoutSignature(element, view.getComputedStyle(element), view.devicePixelRatio) : "";
+}
+
 function rememberWidth(cache: TextMeasurementCache, text: string, width: number): void {
   cache.widths.delete(text);
   cache.widths.set(text, width);
@@ -176,6 +190,7 @@ export function createTextMeasurer(
   sourceText = element.textContent ?? "",
 ): {
   measureText(text: string): number;
+  measureTexts(texts: readonly string[]): readonly number[];
   dispose(): void;
 } {
   const ownsCache = cache === undefined;
@@ -229,6 +244,42 @@ export function createTextMeasurer(
   };
 
   return {
+    measureTexts(texts) {
+      const result: number[] = new Array(texts.length);
+      // Process bounded chunks so even custom calculators cannot grow the probe pool.
+      for (let start = 0; start < texts.length; start += MAX_BATCH_PROBES) {
+        const pending = new Map<string, number[]>();
+        for (let index = start; index < Math.min(texts.length, start + MAX_BATCH_PROBES); index += 1) {
+          const text = normalizeMeasuredText(texts[index]!, computed.whiteSpace);
+          const cached = cachedWidth(measurementCache, text);
+          if (cached !== undefined) result[index] = cached;
+          else {
+            const indices = pending.get(text);
+            if (indices) indices.push(index);
+            else pending.set(text, [index]);
+          }
+        }
+        const reads: { probe: HTMLSpanElement; text: string; indices: number[] }[] = [];
+        for (const [text, indices] of pending) {
+          const index = reads.length;
+          let probe = index === 0 ? activeProbe() : measurementCache.batchProbes[index - 1];
+          if (!probe) {
+            probe = activeProbe().cloneNode(false) as HTMLSpanElement;
+            document.body.append(probe);
+            measurementCache.batchProbes.push(probe);
+          }
+          probe.textContent = text;
+          reads.push({ probe, text, indices });
+        }
+        // All DOM writes finish before the first geometry read in this chunk.
+        for (const { probe, text, indices } of reads) {
+          const width = probe.getBoundingClientRect().width;
+          for (const index of indices) result[index] = width;
+          rememberWidth(measurementCache, text, width);
+        }
+      }
+      return result;
+    },
     measureText(text) {
       const measuredText = normalizeMeasuredText(text, computed.whiteSpace);
       const cached = cachedWidth(measurementCache, measuredText);
@@ -290,6 +341,7 @@ function readBreaks(
   const document = element.ownerDocument;
   const view = document.defaultView;
   if (!view) return [];
+  if (text === "") return [];
   const node = element.firstChild;
   if (!(node instanceof view.Text) || node.data.length !== text.length) {
     throw new Error("Could not map the rendered title back to its source text");

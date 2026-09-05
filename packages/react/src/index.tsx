@@ -36,6 +36,7 @@ import {
   invalidateNativeLayoutMeasurementCache,
   invalidateTextMeasurementCache,
   readNativeLayout,
+  measurementStyleSignature,
   type NativeLayoutMeasurementCache,
   type TextMeasurementCache,
 } from "./dom-measure.js";
@@ -100,7 +101,7 @@ function equalResolution(left: Resolution | null, right: Resolution): boolean {
 function useSemanticWrapEngine(
   options: UseSemanticWrapOptions,
   mode: SemanticWrapMode,
-): UseSemanticWrapResult {
+): UseSemanticWrapResult & { ready: boolean } {
   const [element, setElement] = useState<HTMLElement | null>(null);
   const plan = useMemo(
     () =>
@@ -113,6 +114,7 @@ function useSemanticWrapEngine(
   );
   const [resolutionState, setResolutionState] = useState<Resolution | null>(null);
   const resolutionRef = useRef<Resolution | null>(null);
+  const readyTextRef = useRef<string | null>(null);
   const progressiveActiveRef = useRef(mode === "precise");
   const nativeLayoutMeasurementCacheRef = useRef<NativeLayoutMeasurementCache | null>(null);
   if (nativeLayoutMeasurementCacheRef.current === null) {
@@ -134,6 +136,8 @@ function useSemanticWrapEngine(
         const input = {
           maxWidth: width,
           measureText: measurer.measureText,
+          measureTexts: measurer.measureTexts,
+          cacheKey: textMeasurementCache.metricKey,
           nativeLayout: readNativeLayout(target, options.text, nativeLayoutMeasurementCache),
         };
         return options.diagnostics
@@ -152,6 +156,7 @@ function useSemanticWrapEngine(
       if (!next) return;
       if (equalResolution(resolutionRef.current, next)) return;
       resolutionRef.current = next;
+      readyTextRef.current = next.text;
       if (synchronous) {
         flushSync(() => setResolutionState(next));
       } else {
@@ -175,7 +180,14 @@ function useSemanticWrapEngine(
     const view = defaultView;
 
     let active = true;
+    let workTimer: number | undefined;
+    let settleTimer: number | undefined;
+    let job: Generator<void, Resolution | null, void> | undefined;
+    let completed: Resolution | null = null;
+    let lastChange = 0;
+    let resizing = false;
     let measuredWidth = contentWidth(target);
+    let measuredStyle = measurementStyleSignature(target);
     let preciseActive = mode === "precise" || progressiveActiveRef.current;
     progressiveActiveRef.current = preciseActive;
     if (!preciseActive && resolutionRef.current !== null) {
@@ -184,13 +196,95 @@ function useSemanticWrapEngine(
     }
     if (preciseActive) measureAndCommit(target, false);
 
+    function cancelWork(): void {
+      if (workTimer !== undefined) view.clearTimeout(workTimer);
+      if (settleTimer !== undefined) view.clearTimeout(settleTimer);
+      workTimer = settleTimer = undefined;
+      job?.return(null);
+      job = undefined;
+      completed = null;
+    }
+
+    function commitCompleted(): void {
+      if (!active || !completed) return;
+      const delay = 100 - (performance.now() - lastChange);
+      if (delay > 0) {
+        settleTimer = view.setTimeout(commitCompleted, delay);
+        return;
+      }
+      // ResizeObserver delivery may lag behind the latest style change.
+      const width = contentWidth(target);
+      const style = measurementStyleSignature(target);
+      if (Math.abs(width - measuredWidth) >= 0.01 || style !== measuredStyle) {
+        measuredWidth = width;
+        measuredStyle = style;
+        scheduleResize();
+        return;
+      }
+      const next = completed;
+      completed = null;
+      resizing = false;
+      resolutionRef.current = next;
+      readyTextRef.current = next.text;
+      flushSync(() => setResolutionState(next));
+    }
+
+    function* resolveResize(): Generator<void, Resolution | null, void> {
+      if (!Number.isFinite(measuredWidth) || measuredWidth <= 0) return null;
+      const measurer = createTextMeasurer(target, textMeasurementCache, options.text);
+      try {
+        const nativeLayout = readNativeLayout(target, options.text, nativeLayoutMeasurementCache);
+        yield;
+        return yield* plan.selectSteps({
+          maxWidth: measuredWidth,
+          measureText: measurer.measureText,
+          measureTexts: measurer.measureTexts,
+          cacheKey: textMeasurementCache.metricKey,
+          nativeLayout,
+          diagnostics: options.diagnostics,
+        });
+      } finally {
+        measurer.dispose();
+      }
+    }
+
+    function runSlice(): void {
+      workTimer = undefined;
+      if (!active || !job) return;
+      const deadline = performance.now() + 4;
+      do {
+        const next = job.next();
+        if (next.done) {
+          job = undefined;
+          completed = next.value;
+          commitCompleted();
+          return;
+        }
+      } while (performance.now() < deadline);
+      workTimer = view.setTimeout(runSlice, 0);
+    }
+
+    function scheduleResize(): void {
+      cancelWork();
+      lastChange = performance.now();
+      resizing = true;
+      // A null selection during resize means source/native rendering, not hidden text.
+      if (resolutionRef.current !== null) {
+        resolutionRef.current = null;
+        flushSync(() => setResolutionState(null));
+      }
+      job = resolveResize();
+      workTimer = view.setTimeout(runSlice, 0);
+    }
+
     function activatePrecise(nextWidth: number): void {
       if (!active || preciseActive) return;
       if (Number.isFinite(nextWidth) && nextWidth > 0) measuredWidth = nextWidth;
       preciseActive = true;
       progressiveActiveRef.current = true;
       view.removeEventListener("resize", handleViewportResize);
-      measureAndCommit(target, true);
+      if (mode === "precise") scheduleResize();
+      else measureAndCommit(target, true);
     }
 
     function handleViewportResize(): void {
@@ -211,12 +305,21 @@ function useSemanticWrapEngine(
         activatePrecise(nextWidth);
         return;
       }
-      measureAndCommit(target, true);
+      if (mode === "precise") scheduleResize();
+      else measureAndCommit(target, true);
     });
     observer.observe(target);
 
     const mutationObserver = new view.MutationObserver(() => {
-      if (active && preciseActive) measureAndCommit(target, true);
+      if (!active || !preciseActive) return;
+      const width = contentWidth(target);
+      const style = measurementStyleSignature(target);
+      if (Math.abs(width - measuredWidth) < 0.01 && style === measuredStyle) return;
+      measuredStyle = style;
+      if (mode === "precise") {
+        measuredWidth = width;
+        scheduleResize();
+      } else measureAndCommit(target, true);
     });
     mutationObserver.observe(target, {
       attributes: true,
@@ -228,13 +331,15 @@ function useSemanticWrapEngine(
       if (!active || !preciseActive) return;
       invalidateNativeLayoutMeasurementCache(nativeLayoutMeasurementCache);
       invalidateTextMeasurementCache(textMeasurementCache);
-      measureAndCommit(target, true);
+      if (mode === "precise" && resizing) scheduleResize();
+      else measureAndCommit(target, true);
     };
     void fonts.ready.then(remeasureAfterFontLoad);
     fonts.addEventListener("loadingdone", remeasureAfterFontLoad);
 
     return () => {
       active = false;
+      cancelWork();
       view.removeEventListener("resize", handleViewportResize);
       observer.disconnect();
       mutationObserver.disconnect();
@@ -242,7 +347,7 @@ function useSemanticWrapEngine(
       invalidateNativeLayoutMeasurementCache(nativeLayoutMeasurementCache);
       invalidateTextMeasurementCache(textMeasurementCache);
     };
-  }, [element, measureAndCommit, mode, nativeLayoutMeasurementCache, plan, textMeasurementCache]);
+  }, [element, measureAndCommit, mode, nativeLayoutMeasurementCache, options.diagnostics, options.text, plan, textMeasurementCache]);
 
   const resolution =
     element &&
@@ -252,6 +357,7 @@ function useSemanticWrapEngine(
       : null;
 
   return {
+    ready: readyTextRef.current === options.text,
     ref: setElement,
     selection: resolution,
     diagnostics: resolution && hasDiagnostics(resolution) ? resolution.diagnostics : null,
@@ -272,7 +378,7 @@ interface SemanticChildProps {
 export interface SemanticWrapProps
   extends Omit<UseSemanticWrapOptions, "text" | "diagnostics"> {
   children: ReactElement<SemanticChildProps>;
-  /** Exact-first by default. Progressive keeps native SSR until a viewport or element resize. */
+  /** Precise keeps exact-first rendering and settles resize results cooperatively. */
   mode?: SemanticWrapMode;
   /** Receives the same HTMLElement ref as the child. React 19 only. */
   ref?: Ref<HTMLElement>;
@@ -365,7 +471,7 @@ export function SemanticWrap({
     result.selection?.applied === true
       ? renderWithBreaks(text, result.selection.breaks)
       : text;
-  const pendingPreciseSelection = mode === "precise" && result.selection === null;
+  const pendingPreciseSelection = mode === "precise" && !result.ready;
   const style = pendingPreciseSelection
     ? { ...child.props.style, opacity: 0 }
     : child.props.style;

@@ -50,6 +50,25 @@ const selection = plan.select({ maxWidth, measureText, nativeLayout });
 Calling a later method runs its prerequisites automatically. Prediction and aggregation are
 cached as immutable snapshots; calculation and selection run for each measurement.
 
+Measurement inputs also accept an optional synchronous `measureTexts(texts)` function.
+It must return an array with one finite, non-negative width per input, in the same order,
+equivalent to `texts.map(measureText)`. Core can use it to measure independent segments
+together while preserving the global search. `measureText` remains required for scalar
+requests and calculators that do not use batching. Measurement functions must return
+consistent widths for the same text and style, independent of call order.
+React supplies both functions automatically; Core has no DOM dependency.
+
+`plan.selectSteps(input)` exposes the same selection as a synchronous generator. Advancing
+it performs bounded units of work; its return value is the completed selection. Callers own
+scheduling and can cancel with `return()`. Existing `select` and `calculate` calls consume
+the same work synchronously. The default optimal calculator supplies `calculate.steps`;
+custom calculators without that optional iterator execute as one indivisible call.
+
+Reusable plans accept an optional `cacheKey` object in measurement inputs. Reuse its identity
+only while the exact measured widths remain valid; replace it when fonts or any other text
+metrics change. The global calculator retains up to 65,536 offset-keyed segment widths.
+Eviction affects speed only. Without `cacheKey`, segment widths are not reused across calls.
+
 ## Phrase models and predictors
 
 Each `PhraseModel` level provides one synchronous `predictor`. `definePhraseModel` validates
@@ -112,6 +131,37 @@ layouts with a lower model cost to replace it. Visual balance is then used as an
 and selection criterion. An overflowing native layout may be replaced by any fitting
 calculated layout; without a native layout, Core selects among calculated layouts normally.
 
+## Opt-in native neighborhood search
+
+`nearbyLayouts()` restricts each break to the candidate boundaries around the corresponding
+native break. It measures actual substrings and runs DP with Pareto pruning within that
+restricted space. The default `radius: 2` considers up to five boundaries per native break;
+`radius: 1` and `radius: 4` consider up to three and nine respectively.
+
+```ts
+import { createLineBreakStrategy, nearbyLayouts } from "@semantic-wrap/core";
+
+const strategy = createLineBreakStrategy({ calculate: nearbyLayouts({ radius: 2 }) });
+const result = selectLineBreaks(input, { strategy, nativeLayout });
+```
+
+This is a speed/quality trade-off, not an equivalent replacement for `optimalLayouts()`.
+It keeps the supplied native line count and may miss better semantic or balanced layouts
+outside the neighborhoods. `balance()` still checks actual overflow and requires model
+improvement before replacing a fitting native layout. No fitting local path returns the
+unbroken fallback candidate, so the default selector can preserve native wrapping.
+Without `nativeLayout`, it falls back to `optimalLayouts()`.
+
+Native breaks are now available as `LayoutCalculationContext.nativeLayout`. Core validates
+and freezes that snapshot before invoking the calculator. Both `plan.calculate()` and
+`plan.select()` accept native breaks. DOM measurement remains the caller's responsibility;
+React supplies it automatically. All APIs remain synchronous, and the default calculator
+remains `optimalLayouts()`.
+
+The number of measured transitions is bounded by the neighborhood sizes and line count,
+but Pareto frontier size is not capped. There is no fixed runtime guarantee for arbitrary
+custom models.
+
 ## Public API
 
 - `selectLineBreaks`
@@ -120,7 +170,7 @@ calculated layout; without a native layout, Core selects among calculated layout
 - `definePhraseModel`
 - `createBudouxPredictor`
 - `lowestPenalty`, `consensus`
-- `optimalLayouts`, `greedy`
+- `optimalLayouts`, `nearbyLayouts`, `greedy`
 - `balance`
 - `BoundaryPredictor` and public types for strategies, layouts, and phrase models
 

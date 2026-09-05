@@ -536,12 +536,12 @@ test("uses an actual CSS balance selection for every landing example", async ({ 
           ".measure-pane.is-browser .demo-headline:not(.demo-headline-measure-source)",
         ).innerText();
         if (currentWidth === reference!.width) {
-          expect(await renderedLines(page.locator(
-            ".measure-pane.is-browser .demo-headline:not(.demo-headline-measure-source)",
-          ))).toEqual(reference!.nativeLines);
-          expect(await renderedLines(page.locator(
-            ".measure-pane.is-semantic .demo-headline",
-          ))).toEqual(reference!.semanticLines);
+          await expect.poll(async () => ({
+            native: await renderedLines(page.locator(
+              ".measure-pane.is-browser .demo-headline:not(.demo-headline-measure-source)",
+            )),
+            semantic: await renderedLines(page.locator(".measure-pane.is-semantic .demo-headline")),
+          })).toEqual({ native: reference!.nativeLines, semantic: reference!.semanticLines });
         }
         await expect(page.locator(".measure-pane.is-semantic .demo-headline")).not.toHaveText(
           browserText,
@@ -885,11 +885,15 @@ test("shows a meaningful English change for every playground preset", async ({ p
     await expect(instrument).toHaveAttribute("data-result", "applied");
     const phrase = await instrument.getAttribute("data-semantic-phrase");
     expect(phrase).toBeTruthy();
-    const browserLines = await renderedLines(browserHeadline);
-    const semanticLines = await renderedLines(semanticHeadline);
-    expect(browserLines).toHaveLength(semanticLines.length);
-    expect(browserLines.some((line) => line.includes(phrase!))).toBe(false);
-    expect(semanticLines.some((line) => line.includes(phrase!))).toBe(true);
+    // Precise resize can temporarily expose native soft wrapping. Assert the
+    // completed comparison, not an intermediate frame between independent reads.
+    await expect(async () => {
+      const browserLines = await renderedLines(browserHeadline);
+      const semanticLines = await renderedLines(semanticHeadline);
+      expect(browserLines).toHaveLength(semanticLines.length);
+      expect(browserLines.some((line) => line.includes(phrase!))).toBe(false);
+      expect(semanticLines.some((line) => line.includes(phrase!))).toBe(true);
+    }).toPass({ timeout: 5000 });
     await expect(semanticHeadline.locator(".semantic-diff-changed")).not.toHaveCount(0);
   }
 });

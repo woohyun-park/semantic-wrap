@@ -451,9 +451,10 @@ ref를 전달할 수 있어야 합니다.
 </SemanticWrap>
 ```
 
-두 모드 모두 보이지 않는 DOM copy에서 측정하고 ResizeObserver 안에서 최종 결과만
-동기적으로 반영합니다. 측정을 위해 visible element를 비우거나 원문으로 되돌리지
-않습니다.
+두 모드 모두 보이지 않는 DOM copy에서 측정합니다. precise는 최초 결과를 동기적으로
+표시하고, resize 중에는 원문의 기본 줄바꿈을 보여주며 계산을 나누어 진행합니다. 너비가
+약 100ms 동안 안정되고 계산이 완료되면 최신 결과를 한 번에 적용합니다. hook의
+selection은 계산 중 null일 수 있습니다. progressive의 기존 동기 resize 동작은 유지합니다.
 
 Chakra UI처럼 ref를 전달하는 컴포넌트나 Tailwind CSS로 스타일을 적용한 엘리먼트도
 같은 방식으로 사용할 수 있습니다.

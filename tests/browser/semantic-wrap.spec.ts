@@ -50,21 +50,22 @@ test("activates progressive on viewport resize without an element width change",
   expect(await title.innerText()).toBe("하나 둘\n셋");
 });
 
-test("commits each resize without exposing a break-free intermediate frame", async ({ page }) => {
+test("shows visible native text during resize and commits the latest breaks once settled", async ({ page }) => {
   await page.goto("/");
 
   const title = page.locator("#atomic-title");
   await expect(title.locator("br")).toHaveCount(1);
   const snapshots = await title.evaluate(async (element) => {
     const container = element.parentElement!;
-    const observed: string[] = [];
-    const observer = new MutationObserver(() => observed.push(element.innerHTML));
+    const observed: { html: string; opacity: string }[] = [];
+    const capture = () => observed.push({ html: element.innerHTML, opacity: getComputedStyle(element).opacity });
+    const observer = new MutationObserver(capture);
     observer.observe(element, { childList: true, subtree: true });
 
     for (const width of [320, 200, 320, 200]) {
       container.style.width = `${width}px`;
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      observed.push(element.innerHTML);
+      capture();
     }
 
     observer.disconnect();
@@ -72,7 +73,10 @@ test("commits each resize without exposing a break-free intermediate frame", asy
   });
 
   expect(snapshots.length).toBeGreaterThan(0);
-  expect(snapshots.every((html) => html.includes("<br>"))).toBe(true);
+  expect(snapshots.some(({ html }) => !html.includes("<br>"))).toBe(true);
+  expect(snapshots.every(({ opacity }) => opacity !== "0")).toBe(true);
+  await expect(title.locator("br")).toHaveCount(1);
+  expect(await title.innerText()).toBe("하나\n둘 셋");
 });
 
 test("reuses text widths across resizes and invalidates them for typography changes", async ({

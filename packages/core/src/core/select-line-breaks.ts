@@ -37,6 +37,7 @@ export function selectLineBreaks(
   const selectionInput = {
     maxWidth: input?.maxWidth,
     measureText: input?.measureText,
+    measureTexts: input?.measureTexts,
     nativeLayout: options.nativeLayout,
   };
   return options.diagnostics
