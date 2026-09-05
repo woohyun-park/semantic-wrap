@@ -20,6 +20,7 @@
   "scripts": {
     "build": "bun run clean && tsc -b tsconfig.build.json",
     "bench:core": "bun scripts/benchmark-optimal-layouts.ts",
+    "bench:react": "bun run site:build && SEMANTIC_WRAP_BENCHMARK=1 playwright test tests/browser/performance.spec.ts --project=chromium --workers=1 --reporter=line",
     "changeset": "changeset",
     "ai-docs:check": "bun scripts/sync-ai-docs.ts --check",
     "ai-docs:sync": "bun scripts/sync-ai-docs.ts",

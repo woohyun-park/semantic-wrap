@@ -30,10 +30,13 @@ import {
  */
 import {
   contentWidth,
+  createNativeLayoutMeasurementCache,
   createTextMeasurementCache,
   createTextMeasurer,
+  invalidateNativeLayoutMeasurementCache,
   invalidateTextMeasurementCache,
   readNativeLayout,
+  type NativeLayoutMeasurementCache,
   type TextMeasurementCache,
 } from "./dom-measure.js";
 
@@ -111,6 +114,11 @@ function useSemanticWrapEngine(
   const [resolutionState, setResolutionState] = useState<Resolution | null>(null);
   const resolutionRef = useRef<Resolution | null>(null);
   const progressiveActiveRef = useRef(mode === "precise");
+  const nativeLayoutMeasurementCacheRef = useRef<NativeLayoutMeasurementCache | null>(null);
+  if (nativeLayoutMeasurementCacheRef.current === null) {
+    nativeLayoutMeasurementCacheRef.current = createNativeLayoutMeasurementCache();
+  }
+  const nativeLayoutMeasurementCache = nativeLayoutMeasurementCacheRef.current;
   const textMeasurementCacheRef = useRef<TextMeasurementCache | null>(null);
   if (textMeasurementCacheRef.current === null) {
     textMeasurementCacheRef.current = createTextMeasurementCache();
@@ -126,7 +134,7 @@ function useSemanticWrapEngine(
         const input = {
           maxWidth: width,
           measureText: measurer.measureText,
-          nativeLayout: readNativeLayout(target, options.text),
+          nativeLayout: readNativeLayout(target, options.text, nativeLayoutMeasurementCache),
         };
         return options.diagnostics
           ? plan.select({ ...input, diagnostics: true })
@@ -135,7 +143,7 @@ function useSemanticWrapEngine(
         measurer.dispose();
       }
     },
-    [options.diagnostics, options.text, plan, textMeasurementCache],
+    [nativeLayoutMeasurementCache, options.diagnostics, options.text, plan, textMeasurementCache],
   );
 
   const measureAndCommit = useCallback(
@@ -155,6 +163,7 @@ function useSemanticWrapEngine(
 
   useBrowserLayoutEffect(() => {
     if (!element) {
+      invalidateNativeLayoutMeasurementCache(nativeLayoutMeasurementCache);
       invalidateTextMeasurementCache(textMeasurementCache);
       resolutionRef.current = null;
       setResolutionState(null);
@@ -217,6 +226,7 @@ function useSemanticWrapEngine(
     const fonts = target.ownerDocument.fonts;
     const remeasureAfterFontLoad = () => {
       if (!active || !preciseActive) return;
+      invalidateNativeLayoutMeasurementCache(nativeLayoutMeasurementCache);
       invalidateTextMeasurementCache(textMeasurementCache);
       measureAndCommit(target, true);
     };
@@ -229,8 +239,10 @@ function useSemanticWrapEngine(
       observer.disconnect();
       mutationObserver.disconnect();
       fonts.removeEventListener("loadingdone", remeasureAfterFontLoad);
+      invalidateNativeLayoutMeasurementCache(nativeLayoutMeasurementCache);
+      invalidateTextMeasurementCache(textMeasurementCache);
     };
-  }, [element, measureAndCommit, mode, plan, textMeasurementCache]);
+  }, [element, measureAndCommit, mode, nativeLayoutMeasurementCache, plan, textMeasurementCache]);
 
   const resolution =
     element &&

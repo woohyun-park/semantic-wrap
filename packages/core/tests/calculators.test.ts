@@ -144,6 +144,7 @@ describe("optimalLayouts", () => {
   test("stops measuring longer segments and prunes impossible suffixes", () => {
     const text = "aa bb cc dd ee";
     const stats: OptimalLayoutCalculationStats = {
+      allocatedSegmentWidthSlots: 0,
       measuredSegments: 0,
       visitedStates: 0,
       memoHits: 0,
@@ -164,6 +165,7 @@ describe("optimalLayouts", () => {
 
     const positionCount = candidates.length + 1;
     const allSegments = positionCount * (positionCount + 1) / 2;
+    expect(stats.allocatedSegmentWidthSlots).toBe(stats.measuredSegments);
     expect(stats.measuredSegments).toBeLessThan(allSegments);
     expect(stats.prunedTransitions).toBeGreaterThan(0);
   });

@@ -4,11 +4,12 @@ import {
   createBudouxPredictor,
   createLineBreakStrategy,
   type LineBreakCalculator,
+  type LineBreakStrategy,
   type PhraseModel,
 } from "../../packages/core/src/index.js";
 import { SemanticWrap } from "../../packages/react/src/index.js";
 import { useSemanticWrap } from "../../packages/react/src/index.js";
-import { createTextMeasurer } from "../../packages/react/src/dom-measure.js";
+import { createTextMeasurer, readNativeLayout } from "../../packages/react/src/dom-measure.js";
 import { koTitleModel } from "../../packages/ko/src/index.js";
 
 const model: PhraseModel = {
@@ -44,6 +45,176 @@ const candidateStrategy = createLineBreakStrategy({
   calculate: () => [{ breaks: [2] }],
   select: () => ({ selected: "calculated", index: 0, reason: "candidate-test" }),
 });
+
+interface BrowserBenchmarkStats {
+  calculateCalls: number;
+  calculateMs: number;
+  pendingStartedAt: number | null;
+  selectionDurations: number[];
+}
+
+function browserBenchmarkStats(): BrowserBenchmarkStats | undefined {
+  return Reflect.get(window, "__semanticWrapBenchmarkStats") as BrowserBenchmarkStats | undefined;
+}
+
+const benchmarkDefaultStrategy = createLineBreakStrategy();
+const benchmarkStrategy: LineBreakStrategy = createLineBreakStrategy({
+  calculate: (context) => {
+    const stats = browserBenchmarkStats();
+    const startedAt = performance.now();
+    const result = benchmarkDefaultStrategy.calculate(context);
+    if (stats) {
+      stats.calculateCalls += 1;
+      stats.calculateMs += performance.now() - startedAt;
+    }
+    return result;
+  },
+  select: (context) => {
+    const result = benchmarkDefaultStrategy.select(context);
+    const stats = browserBenchmarkStats();
+    if (stats?.pendingStartedAt !== null && stats?.pendingStartedAt !== undefined) {
+      stats.selectionDurations.push(performance.now() - stats.pendingStartedAt);
+      stats.pendingStartedAt = null;
+    }
+    return result;
+  },
+});
+
+const LONG_BENCHMARK_TEXT = `${[
+  "복잡한 제품을 설계하고 운영하는 팀이 사용자에게 정말 필요한 경험을 제공하려면 눈앞의 기능을 빠르게 추가하는 것만으로는 충분하지 않으며 문제를 정의한 배경과 선택하지 않은 대안 그리고 실제 사용 과정에서 발견된 제약을 함께 기록하고 공유해야 합니다.",
+  "새로운 기능을 제안할 때는 기대하는 변화와 성공을 판단할 기준을 먼저 정하고 작은 범위에서 실험한 다음 관찰된 결과가 처음의 가정을 지지하는지 아니면 전혀 다른 문제를 드러내는지 차분하게 확인해야 합니다.",
+  "디자인과 개발 과정에서 빠르게 내린 결정도 시간이 지나면 당연한 규칙처럼 굳어지므로 당시의 맥락과 트레이드오프를 문서에 남겨 다음 사람이 같은 논의를 처음부터 반복하지 않게 만드는 일이 중요합니다.",
+  "사용자의 행동은 정리된 요구사항보다 복잡하고 예외도 많기 때문에 정상적인 흐름만 확인해서는 부족하며 느린 네트워크와 좁은 화면과 긴 번역문과 예상하지 못한 입력까지 포함해 제품이 어떻게 반응하는지 살펴봐야 합니다.",
+  "측정 결과를 해석할 때는 하나의 평균값만 보는 대신 입력 크기별 변화와 가장 느린 구간과 메모리 사용량과 반복 실행의 편차를 함께 확인해야 실제 병목이 어디에서 발생하는지 더 정확하게 이해할 수 있습니다.",
+  "알고리즘을 최적화할 때도 가장 복잡한 기법을 먼저 도입하기보다 불필요한 계산을 멈추고 실패가 확실한 경로를 일찍 제거하고 이미 계산한 결과를 재사용하는 기본적인 개선부터 검증하는 편이 안전합니다.",
+  "서로 다른 장점을 가진 후보를 모두 보존해야 하는 상황에서는 하나의 점수로 성급하게 합치지 말고 어떤 후보가 다른 후보보다 모든 기준에서 나쁜지를 판단해 의미 있는 선택지만 다음 단계로 전달해야 합니다.",
+  "마지막으로 실제 화면에서 폭을 계속 바꾸고 글꼴이 로드되는 순간과 브라우저가 다시 레이아웃을 계산하는 순간을 관찰하면서 계산 결과뿐 아니라 인터페이스가 멈추거나 흔들리지 않는지도 함께 확인해야 합니다.",
+].join(" ")} `
+  .repeat(6)
+  .trim();
+
+function LongBenchmarkFixture({ diagnostics }: { diagnostics: boolean }) {
+  const { ref, selection } = useSemanticWrap({
+    text: LONG_BENCHMARK_TEXT,
+    model: koTitleModel,
+    strategy: benchmarkStrategy,
+    diagnostics,
+  });
+
+  return (
+    <section>
+      <div id="benchmark-container" style={{ width: 320 }}>
+        <p
+          id="benchmark-title"
+          ref={ref}
+          style={{
+            fontFamily: "system-ui",
+            fontSize: 16,
+            fontWeight: 600,
+            letterSpacing: "-0.035em",
+            lineHeight: 1.45,
+            margin: 0,
+            width: "100%",
+            wordBreak: "keep-all",
+          }}
+        >
+          {LONG_BENCHMARK_TEXT}
+        </p>
+      </div>
+      <output
+        id="benchmark-status"
+        data-breaks={selection?.breaks.join(",")}
+        data-ready={String(selection !== null)}
+        data-text-length={LONG_BENCHMARK_TEXT.length}
+      />
+    </section>
+  );
+}
+
+const NATIVE_PARITY_CASES = [
+  {
+    id: "ko-keep-all",
+    text: "복잡한 제품을 설계하고 운영하는 팀이 사용자에게 정말 필요한 경험을 제공하려면 충분한 검증이 필요합니다.",
+    style: { width: 240, wordBreak: "keep-all" },
+  },
+  {
+    id: "latin-normal",
+    text: "Measure the exact native wrapping result across several widths without changing the visible source text.",
+    style: { width: 210, wordBreak: "normal" },
+  },
+  {
+    id: "break-all-emoji",
+    text: "긴문장🙂withEmoji🚀andMixedScripts줄바꿈경계를정확히찾습니다",
+    style: { width: 135, wordBreak: "break-all" },
+  },
+  {
+    id: "pre-wrap",
+    text: "multiple   spaces and\na preserved newline should map to the same source offsets",
+    style: { width: 185, whiteSpace: "pre-wrap" },
+  },
+] as const;
+
+function linearNativeBreaks(element: HTMLElement, text: string): number[] {
+  const node = element.firstChild;
+  if (!(node instanceof Text)) throw new Error("Parity fixture requires one text node");
+  const offsets = [0];
+  for (const character of text) offsets.push(offsets.at(-1)! + character.length);
+  const range = document.createRange();
+  const lineStarts: number[] = [];
+  let previousTop: number | null = null;
+  for (let index = 0; index < offsets.length - 1; index += 1) {
+    range.setStart(node, offsets[index]!);
+    range.setEnd(node, offsets[index + 1]!);
+    const top = Math.round(range.getBoundingClientRect().top * 100) / 100;
+    if (previousTop !== null && top !== previousTop) {
+      let start = offsets[index]!;
+      while (start > 0 && /\s/u.test(text[start - 1] ?? "")) start -= 1;
+      if (start > 0 && start < text.length) lineStarts.push(start);
+    }
+    previousTop = top;
+  }
+  return [...new Set(lineStarts)];
+}
+
+function NativeLayoutParityFixture() {
+  const containerRef = useRef<HTMLElement | null>(null);
+  const [result, setResult] = useState<string>("");
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const cases = NATIVE_PARITY_CASES.map(({ id, text }) => {
+      const element = container.querySelector<HTMLElement>(`[data-case="${id}"]`)!;
+      return {
+        id,
+        optimized: readNativeLayout(element, text).breaks,
+        linear: linearNativeBreaks(element, text),
+      };
+    });
+    setResult(JSON.stringify(cases));
+  }, []);
+
+  return (
+    <section ref={containerRef}>
+      {NATIVE_PARITY_CASES.map(({ id, text, style }) => (
+        <p
+          data-case={id}
+          key={id}
+          style={{
+            fontFamily: "system-ui",
+            fontSize: 17,
+            lineHeight: 1.4,
+            margin: 0,
+            ...style,
+          }}
+        >
+          {text}
+        </p>
+      ))}
+      <output id="native-layout-parity">{result}</output>
+    </section>
+  );
+}
 
 function CandidateFixture() {
   const [alternate, setAlternate] = useState(false);
@@ -202,6 +373,12 @@ function KoreanAppliedFixture() {
 }
 
 function App() {
+  const search = new URLSearchParams(window.location.search);
+  if (search.get("benchmark") === "long") {
+    return <LongBenchmarkFixture diagnostics={search.get("diagnostics") === "true"} />;
+  }
+  if (search.get("native-parity") === "true") return <NativeLayoutParityFixture />;
+
   return (
     <>
       <SemanticWrap model={model} strategy={responsiveStrategy}>
