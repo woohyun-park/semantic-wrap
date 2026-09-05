@@ -2,6 +2,7 @@ node_modules/
 dist/
 playwright-report/
 test-results/
+dogfood-output/
 # Local-only training data, alternative models, and comparison experiments.
 .cache/
 *.tgz

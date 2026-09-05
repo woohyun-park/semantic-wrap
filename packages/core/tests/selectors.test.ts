@@ -241,6 +241,36 @@ describe("selectLineBreaks", () => {
     expect(result.lines).toEqual(["하나 둘", "셋 넷"]);
   });
 
+  test.each([
+    { penalties: [0, 0, 0, 0, 0], breaks: [5, 11] },
+    { penalties: [0, 1, 1, 0, 1], breaks: [2, 8, 11] },
+  ])("greedy keeps later fitting candidates available after choosing a boundary: %j", ({ penalties, breaks }) => {
+    const result = greedy()({
+      text: "aa bb cc dd ee ff",
+      maxWidth: 5,
+      measureText,
+      candidates: penalties.map((penalty, index) => ({
+        offset: 2 + index * 3, level: null, penalty,
+      })),
+    });
+    expect(result).toEqual([{ breaks }]);
+  });
+
+  test("greedy stops measuring after selecting the last available boundary", () => {
+    const measured: string[] = [];
+    const result = greedy()({
+      text: "aa bb",
+      maxWidth: 2,
+      candidates: [{ offset: 2, level: null, penalty: 0 }],
+      measureText: (text) => {
+        measured.push(text);
+        return text.length;
+      },
+    });
+    expect(result).toEqual([{ breaks: [2] }]);
+    expect(measured).toEqual(["aa bb", "aa"]);
+  });
+
   test("accepts custom calculation and selection stages", () => {
     const strategy = createLineBreakStrategy({
       aggregate: () => candidates,
