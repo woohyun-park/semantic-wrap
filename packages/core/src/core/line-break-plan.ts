@@ -5,7 +5,6 @@ import { createLineBreakStrategy } from "./strategy.js";
 import type {
   BaselineLayout,
   BreakCandidate,
-  BreakPrediction,
   LayoutCalculationContext,
   LayoutSelectionDecision,
   LineBreakLayout,
@@ -83,19 +82,11 @@ function validateCalculatedCandidates(value: unknown): { breaks: readonly number
   return value as { breaks: readonly number[] }[];
 }
 
-function immutablePredictions(values: readonly BreakPrediction[]): readonly BreakPrediction[] {
+function immutableRecords<T extends object>(values: readonly T[]): readonly T[] {
   return Object.freeze(values.map((value) => Object.freeze({ ...value })));
 }
 
-function immutableCandidates(values: readonly BreakCandidate[]): readonly BreakCandidate[] {
-  return Object.freeze(values.map((value) => Object.freeze({ ...value })));
-}
-
-function immutableNumbers(values: readonly number[]): readonly number[] {
-  return Object.freeze([...values]);
-}
-
-function immutableStrings(values: readonly string[]): readonly string[] {
+function immutableArray<T>(values: readonly T[]): readonly T[] {
   return Object.freeze([...values]);
 }
 
@@ -115,9 +106,9 @@ function materializeLayout(
     return candidate ? [candidate] : [];
   });
   return Object.freeze({
-    breaks: immutableNumbers(breakOffsets),
-    lines: immutableStrings(layout.lines),
-    widths: immutableNumbers(layout.widths),
+    breaks: immutableArray(breakOffsets),
+    lines: immutableArray(layout.lines),
+    widths: immutableArray(layout.widths),
     selectedCandidates: Object.freeze([...selectedCandidates]),
     lineCount: layout.lineCount,
     balanceScore: layout.balanceScore,
@@ -154,8 +145,8 @@ class LazyLineBreakPlan implements LineBreakPlan {
     if (this.#prediction) return this.#prediction;
     const result = predictBreaks(this.#text, this.#model);
     this.#prediction = Object.freeze({
-      predictions: immutablePredictions(result.predictions),
-      allowedOffsets: immutableNumbers(result.allowedOffsets),
+      predictions: immutableRecords(result.predictions),
+      allowedOffsets: immutableArray(result.allowedOffsets),
       fallbackPenalty: result.fallbackPenalty,
     });
     return this.#prediction;
@@ -181,7 +172,7 @@ class LazyLineBreakPlan implements LineBreakPlan {
     if (candidates.some(({ offset }) => !allowedOffsets.has(offset))) {
       throw new Error("Aggregated candidates must reference allowed offsets");
     }
-    this.#candidates = immutableCandidates(candidates);
+    this.#candidates = immutableRecords(candidates);
     return this.#candidates;
   }
 
@@ -213,7 +204,7 @@ class LazyLineBreakPlan implements LineBreakPlan {
         throw new Error("Native layout must contain a breaks array");
       }
       validateOffsets(this.#text, measurement.nativeLayout.breaks, "Native breaks");
-      nativeLayout = Object.freeze({ breaks: immutableNumbers(measurement.nativeLayout.breaks) });
+      nativeLayout = Object.freeze({ breaks: immutableArray(measurement.nativeLayout.breaks) });
     }
     const context: SegmentMeasurementContext = {
       text: this.#text,

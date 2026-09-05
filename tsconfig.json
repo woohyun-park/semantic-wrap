@@ -12,6 +12,8 @@
       "@semantic-wrap/react": ["./packages/react/src/index.tsx"]
     },
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "target": "ES2022",
     "types": ["bun"]
   },

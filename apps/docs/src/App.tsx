@@ -497,7 +497,7 @@ function ProcessCandidates({
       lang={locale}
       aria-label={`${content.process.candidateLabel}: ${text}`}
     >
-      {segments.map((segment, index) => (
+      {segments.map((segment) => (
         <Fragment key={`${segment.candidate?.offset ?? "end"}-${segment.text}`}>
           <span>{segment.text}</span>
           {segment.candidate ? (

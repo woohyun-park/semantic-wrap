@@ -4,7 +4,6 @@ import {
   createLineBreakPlan,
   createLineBreakStrategy,
   lowestPenalty,
-  selectLineBreaks,
   type PhraseModel,
 } from "../src/index.js";
 

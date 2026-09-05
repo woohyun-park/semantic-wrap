@@ -35,23 +35,21 @@ export function greedy(): LineBreakCalculator {
 
     while (start < context.text.length) {
       if (context.measureText(context.text.slice(start)) <= context.maxWidth) break;
-      const fitting = [] as typeof context.candidates[number][];
-      let scan = candidateIndex;
-      for (; scan < context.candidates.length; scan += 1) {
+      let selected: typeof context.candidates[number] | undefined;
+      for (let scan = candidateIndex; scan < context.candidates.length; scan += 1) {
         const candidate = context.candidates[scan]!;
         if (candidate.offset <= start) continue;
         const line = context.text.slice(start, candidate.offset);
-        if (context.measureText(line) <= context.maxWidth) fitting.push(candidate);
-        else break;
+        if (!(context.measureText(line) <= context.maxWidth)) break;
+        if (!selected || candidate.penalty <= selected.penalty) {
+          selected = candidate;
+          candidateIndex = scan + 1;
+        }
       }
-      const selected = fitting.sort((left, right) =>
-        left.penalty === right.penalty ? right.offset - left.offset : left.penalty - right.penalty,
-      )[0];
       if (!selected) break;
       breaks.push(selected.offset);
       start = nextTextOffset(context.text, selected.offset);
-      candidateIndex = context.candidates.findIndex(({ offset }) => offset > selected.offset);
-      if (candidateIndex < 0) break;
+      if (candidateIndex === context.candidates.length) break;
     }
 
     return [{ breaks }];
