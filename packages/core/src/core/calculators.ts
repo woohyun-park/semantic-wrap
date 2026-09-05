@@ -1,15 +1,28 @@
 import {
   calculateOptimalLayouts,
+  calculateOptimalLayoutSteps,
   nextTextOffset,
 } from "./line-layout.js";
 import type {
   LineBreakCalculator,
   LayoutCalculationContext,
+  NearbyLayoutsOptions,
 } from "./types.js";
+import { calculateNearbyLayouts } from "./nearby-layouts.js";
+
+/** Opt-in local search; may miss improvements outside the native break neighborhoods. */
+export function nearbyLayouts(options: NearbyLayoutsOptions = {}): LineBreakCalculator {
+  const radius = options.radius ?? 2;
+  if (![1, 2, 4].includes(radius)) throw new Error("Nearby layout radius must be 1, 2, or 4");
+  return (context) => {
+    const layouts = calculateNearbyLayouts(context, radius);
+    return layouts.length > 0 ? layouts : [{ breaks: [] }];
+  };
+}
 
 /** Calculates the non-dominated, minimum-line layout candidates. */
 export function optimalLayouts(): LineBreakCalculator {
-  return calculateOptimalLayouts;
+  return Object.assign(calculateOptimalLayouts, { steps: calculateOptimalLayoutSteps });
 }
 
 /** Greedily fills each line while preferring the least costly boundary that fits. */

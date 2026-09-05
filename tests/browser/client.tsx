@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   createBudouxPredictor,
   createLineBreakStrategy,
+  nearbyLayouts,
   type LineBreakCalculator,
   type LineBreakStrategy,
   type PhraseModel,
@@ -11,6 +12,11 @@ import { SemanticWrap } from "../../packages/react/src/index.js";
 import { useSemanticWrap } from "../../packages/react/src/index.js";
 import { createTextMeasurer, readNativeLayout } from "../../packages/react/src/dom-measure.js";
 import { koTitleModel } from "../../packages/ko/src/index.js";
+import { installNearbyBenchmark } from "./nearby-benchmark.js";
+import { installBatchWidthChecks } from "./batch-widths.js";
+import { ResizeFixture } from "./resize-fixture.js";
+
+installBatchWidthChecks();
 
 const model: PhraseModel = {
   boundaryMode: "spaces",
@@ -51,13 +57,18 @@ interface BrowserBenchmarkStats {
   calculateMs: number;
   pendingStartedAt: number | null;
   selectionDurations: number[];
+  pendingCommitStartedAt?: number | null;
+  commitDurations?: number[];
 }
 
 function browserBenchmarkStats(): BrowserBenchmarkStats | undefined {
   return Reflect.get(window, "__semanticWrapBenchmarkStats") as BrowserBenchmarkStats | undefined;
 }
 
-const benchmarkDefaultStrategy = createLineBreakStrategy();
+const benchmarkRadius = new URLSearchParams(window.location.search).get("radius");
+const benchmarkDefaultStrategy = createLineBreakStrategy(benchmarkRadius ? {
+  calculate: nearbyLayouts({ radius: Number(benchmarkRadius) as 1 | 2 | 4 }),
+} : {});
 const benchmarkStrategy: LineBreakStrategy = createLineBreakStrategy({
   calculate: (context) => {
     const stats = browserBenchmarkStats();
@@ -93,6 +104,46 @@ const LONG_BENCHMARK_TEXT = `${[
   .repeat(6)
   .trim();
 
+installNearbyBenchmark(LONG_BENCHMARK_TEXT);
+
+let nearbyIntegrationCalls = 0;
+const nearbyCalculator = nearbyLayouts();
+const nearbyIntegrationStrategy = createLineBreakStrategy({ calculate: (context) => {
+  nearbyIntegrationCalls += 1;
+  Reflect.set(window, "__nearbyIntegrationCalls", nearbyIntegrationCalls);
+  return nearbyCalculator(context);
+} });
+
+function NearbyReactFixture() {
+  const [alternate, setAlternate] = useState(false);
+  const [visible, setVisible] = useState(true);
+  const [fontSize, setFontSize] = useState(16);
+  const text = alternate ? "사용자에게 필요한 경험을 설계하는 팀의 기준을 함께 살펴봅니다."
+    : "디자인 시스템을 도입하기 전에 반드시 확인해야 할 기준";
+  return <section>
+    <button id="nearby-text" type="button" onClick={() => setAlternate(!alternate)}>Text</button>
+    <button id="nearby-font" type="button" onClick={() => setFontSize(fontSize === 16 ? 23 : 16)}>Font</button>
+    <button id="nearby-visible" type="button" onClick={() => setVisible(!visible)}>Mount</button>
+    {visible && <NearbyReactTitles text={text} fontSize={fontSize} />}
+  </section>;
+}
+
+function NearbyReactTitles({ text, fontSize }: { text: string; fontSize: number }) {
+  const { ref, selection } = useSemanticWrap({ text, model: koTitleModel,
+    strategy: nearbyIntegrationStrategy });
+  const style = { fontSize, fontFamily: "system-ui", fontWeight: 600,
+    letterSpacing: "-0.035em", lineHeight: 1.45, width: "100%", margin: 0, wordBreak: "keep-all" as const };
+  return <div id="nearby-container" style={{ width: 320 }}>
+    <p ref={ref} style={style}>{text}</p>
+    <SemanticWrap model={koTitleModel} strategy={nearbyIntegrationStrategy}>
+      <p id="nearby-rendered" style={style}>{text}</p>
+    </SemanticWrap>
+    <output id="nearby-react-status" data-ready={String(selection !== null)}
+      data-applied={String(selection?.applied)}
+      data-lines={JSON.stringify(selection?.lines)} data-source={text} data-calls={nearbyIntegrationCalls} />
+  </div>;
+}
+
 function LongBenchmarkFixture({ diagnostics }: { diagnostics: boolean }) {
   const { ref, selection } = useSemanticWrap({
     text: LONG_BENCHMARK_TEXT,
@@ -100,6 +151,13 @@ function LongBenchmarkFixture({ diagnostics }: { diagnostics: boolean }) {
     strategy: benchmarkStrategy,
     diagnostics,
   });
+  useLayoutEffect(() => {
+    const stats = browserBenchmarkStats();
+    if (selection && stats?.pendingCommitStartedAt != null) {
+      stats.commitDurations?.push(performance.now() - stats.pendingCommitStartedAt);
+      stats.pendingCommitStartedAt = null;
+    }
+  }, [selection]);
 
   return (
     <section>
@@ -373,7 +431,9 @@ function KoreanAppliedFixture() {
 }
 
 function App() {
+  if (new URLSearchParams(location.search).has("resize-demo")) return <ResizeFixture longText={LONG_BENCHMARK_TEXT} />;
   const search = new URLSearchParams(window.location.search);
+  if (search.has("nearby-react")) return <NearbyReactFixture />;
   if (search.get("benchmark") === "long") {
     return <LongBenchmarkFixture diagnostics={search.get("diagnostics") === "true"} />;
   }

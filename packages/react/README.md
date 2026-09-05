@@ -45,7 +45,17 @@ when immediate LCP is more important than semantic wrapping on the first viewpor
 
 Progressive mode renders untouched native text initially and switches permanently to the
 precise pipeline on the first viewport or element resize. Both modes measure native wrapping
-in an invisible copy and synchronously commit only the final result during resize.
+in an invisible copy. After its initial synchronous selection, precise renders the source
+with native wrapping during resize and computes the latest result in cooperative slices.
+It commits once the width has been stable for about 100 ms and calculation is complete.
+`useSemanticWrap` returns a null selection while resize work is pending. Progressive keeps
+its existing synchronous resize behavior.
+
+Exact segment widths are reused across container widths, with at most 65,536 offset-keyed
+entries per plan/metric identity. Typography changes and unmount invalidate the cache.
+The approximately 4 ms work budget is cooperative, not a hard deadline: individual browser
+operations and custom synchronous predictors/calculators/selectors cannot be interrupted.
+Custom calculators can supply a synchronous `steps` iterator for cooperative execution.
 
 ### Chakra UI
 
@@ -72,6 +82,29 @@ const greedyStrategy = createLineBreakStrategy({ calculate: greedy() });
   <h2 className="text-3xl font-bold leading-tight">{title}</h2>
 </SemanticWrap>
 ```
+
+The default global search batches exact DOM text measurements automatically, using a
+bounded pool of reusable hidden elements. It keeps the existing candidate space and
+selection rules; no configuration is required. Probes are released on invalidation and
+unmount.
+
+## Faster local search for long text
+
+```tsx
+import { createLineBreakStrategy, nearbyLayouts } from "@semantic-wrap/core";
+
+const nearbyStrategy = createLineBreakStrategy({ calculate: nearbyLayouts() });
+
+<SemanticWrap model={enTitleModel} strategy={nearbyStrategy}>
+  <p>{longText}</p>
+</SemanticWrap>
+```
+
+React supplies the measured native breaks automatically. This opt-in calculator searches
+near native line endings using exact substring measurements. It can substantially reduce
+work on long text, but can miss improvements found by the default global search; it is not
+a guarantee of identical wrapping or smooth 60fps resizing. The default remains
+`optimalLayouts()`. The same `strategy` works with `useSemanticWrap`.
 
 ## `useSemanticWrap`
 

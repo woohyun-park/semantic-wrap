@@ -58,6 +58,13 @@ it keeps SSR text in the HTML, holds it at zero opacity until the first exact se
 ready, and then renders the result. Progressive mode leaves SSR text completely untouched
 and starts precise selection on the first viewport or element resize.
 
+After its first exact layout, `precise` shows native wrapping while resizing and completes
+the same global calculation in cooperative slices. It applies only the latest result once
+the width has been stable for approximately 100 ms and calculation is complete. This keeps
+long resize calculations from continuously blocking the main thread; the final wrapping can
+arrive later. Initial precise rendering remains synchronous. Progressive resize behavior is
+unchanged. No additional mode or wrapper is required.
+
 ## Packages
 
 | Package | Purpose |
@@ -379,9 +386,10 @@ Wrap the styled element when using Chakra UI or Tailwind CSS.
 </SemanticWrap>
 ```
 
-Both modes measure in an invisible DOM copy and synchronously commit the final result from
-the resize observer. The visible element is never cleared or changed to raw text for
-measurement.
+Both modes measure in an invisible DOM copy. Precise temporarily renders the unchanged source
+during resize, then atomically applies the completed result for the latest width. Progressive
+retains its existing synchronous resize selection. A hook selection can be `null` while a
+precise resize is pending; this represents native rendering, not hidden text.
 
 #### Chakra UI
 

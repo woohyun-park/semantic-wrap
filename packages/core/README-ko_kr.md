@@ -51,6 +51,42 @@ const selection = plan.select({ maxWidth, measureText, nativeLayout });
 뒤 단계를 바로 호출하면 필요한 앞 단계를 자동 실행합니다. 예측과 집계는 immutable
 snapshot으로 캐시하고, 계산과 선택은 measurement마다 다시 실행합니다.
 
+측정 입력에는 선택적으로 동기 함수 `measureTexts(texts)`를 제공할 수 있습니다.
+`texts.map(measureText)`와 같은 너비를 입력 순서대로 배열로 반환해야 하며, 각 너비는
+0 이상의 유한한 수여야 합니다. Core는 독립적인 구간을 묶어 측정해도 기존 전체 탐색과
+선택 결과를 유지합니다. 개별 측정을 위한 `measureText`도 계속 필요합니다. 같은 텍스트와
+스타일의 너비는 호출 순서에 관계없이 일정해야 합니다. React는 두 함수를 자동으로 제공합니다.
+
+`plan.selectSteps(input)`은 같은 선택 결과를 만드는 동기 generator입니다. 호출자가 작업을
+나누어 진행할 시점과 취소(`return()`)를 결정합니다. 기존 `select`와 `calculate`는 같은
+작업을 동기적으로 끝까지 실행합니다. 사용자 calculator는 선택적으로 `steps`를 제공할 수
+있으며, 제공하지 않은 동기 콜백은 실행 도중 중단되지 않습니다.
+
+측정 입력의 선택적 `cacheKey` 객체로 구간 너비를 재사용할 수 있습니다. 실제 너비가 유효한
+동안에만 같은 객체를 사용하고 글꼴 등 측정 조건이 바뀌면 새 객체를 전달하세요.
+최대 65,536개 구간을 시작·끝 offset으로 저장하며, 캐시 제거는 속도에만 영향을 줍니다.
+
+## 기본 줄바꿈 주변만 탐색하기
+
+```ts
+import { createLineBreakStrategy, nearbyLayouts } from "@semantic-wrap/core";
+
+const strategy = createLineBreakStrategy({ calculate: nearbyLayouts({ radius: 2 }) });
+const result = selectLineBreaks(input, { strategy, nativeLayout });
+```
+
+`nearbyLayouts()`는 기본 줄바꿈 주변 후보만 실제 너비로 측정하고 DP와 Pareto pruning을
+적용합니다. `radius`는 1·2·4를 지원하며, 각각 경계마다 최대 3·5·9개 후보를 고려합니다.
+줄 수는 기본 결과와 같게 유지하지만, 탐색 범위 밖의 더 좋은 조합을 놓칠 수 있습니다.
+기존 `balance()`의 overflow 및 의미 개선 검사는 유지합니다. 적합한 경로가 없으면
+줄바꿈 없는 후보를 반환해 기본 선택기가 native 결과를 유지할 수 있게 합니다.
+
+`nativeLayout`이 없으면 `optimalLayouts()`를 사용합니다. `plan.calculate()`와
+`plan.select()` 모두 native 결과를 받을 수 있고, 계산기에는 검증·동결된
+`context.nativeLayout`을 전달합니다. React는 이 값을 자동으로 제공합니다.
+동기 API와 기본 계산기 `optimalLayouts()`는 그대로입니다. Pareto 후보 수는 제한하지
+않으므로 임의의 모델에 대해 일정한 실행 시간을 보장하지는 않습니다.
+
 ## Phrase model과 predictor
 
 각 `PhraseModel` level에는 동기식 `predictor`를 넣습니다. `definePhraseModel`은 재사용할

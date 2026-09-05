@@ -64,11 +64,17 @@ export interface LayoutCalculationContext {
   candidates: readonly BreakCandidate[];
   maxWidth: number;
   measureText(text: string): number;
+  /** Optional synchronous batch measurement, in input order; must match measureText. */
+  measureTexts?(texts: readonly string[]): readonly number[];
+  /** Validated native breaks, when provided for this measurement. */
+  nativeLayout?: BaselineLayout;
 }
 
-export type LineBreakCalculator = (
-  context: LayoutCalculationContext,
-) => readonly LineBreakLayoutCandidate[];
+export interface LineBreakCalculator {
+  (context: LayoutCalculationContext): readonly LineBreakLayoutCandidate[];
+  /** Optional cooperative implementation, returning the same candidates. */
+  steps?(context: LayoutCalculationContext): Generator<void, readonly LineBreakLayoutCandidate[], void>;
+}
 
 export interface LineBreakLayout {
   readonly breaks: readonly number[];
@@ -123,6 +129,8 @@ export interface SelectLineBreaksInput {
   model: PhraseModel;
   maxWidth: number;
   measureText(text: string): number;
+  /** Optional synchronous batch measurement, equivalent to texts.map(measureText). */
+  measureTexts?(texts: readonly string[]): readonly number[];
 }
 
 export interface SelectLineBreaksOptions {
@@ -138,13 +146,22 @@ export interface LineBreakPlanInput {
 }
 
 export interface LineBreakMeasurement {
+  /** Stable identity for exact text metrics. Change it whenever measured widths can change. */
+  cacheKey?: object;
   maxWidth: number;
   measureText(text: string): number;
+  /** Optional synchronous batch measurement, equivalent to texts.map(measureText). */
+  measureTexts?(texts: readonly string[]): readonly number[];
+  nativeLayout?: BaselineLayout;
 }
 
 export interface LineBreakSelectionInput extends LineBreakMeasurement {
-  nativeLayout?: BaselineLayout;
   diagnostics?: boolean;
+}
+
+export interface NearbyLayoutsOptions {
+  /** Candidate boundaries on either side of each native break. Default: 2. */
+  radius?: 1 | 2 | 4;
 }
 
 export interface LineBreakPrediction {
@@ -154,6 +171,9 @@ export interface LineBreakPrediction {
 }
 
 export interface LineBreakPlan {
+  /** Synchronous iterator; callers decide when to resume or cancel it. */
+  selectSteps(input: LineBreakSelectionInput & { diagnostics: true }): Generator<void, LineBreakSelectionWithDiagnostics, void>;
+  selectSteps(input: LineBreakSelectionInput): Generator<void, LineBreakSelection, void>;
   predict(): LineBreakPrediction;
   aggregate(): readonly BreakCandidate[];
   calculate(measurement: LineBreakMeasurement): readonly LineBreakLayout[];

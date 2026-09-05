@@ -3,6 +3,12 @@ import type {
   LayoutCalculationContext,
   LineBreakLayoutCandidate,
 } from "./types.js";
+import { finishSteps } from "./steps.js";
+
+/** Internal offset-based measurement hook owned by a reusable plan. */
+export interface SegmentMeasurementContext extends LayoutCalculationContext {
+  measureSegments?(ranges: readonly (readonly [number, number])[]): readonly number[];
+}
 
 export interface InternalLayout {
   lines: string[];
@@ -14,7 +20,7 @@ export interface InternalLayout {
   overflow: boolean;
 }
 
-interface CandidateLayout {
+export interface CandidateLayout {
   breaks: BreakCandidate[];
   signature: string;
   rawBalanceCost: number;
@@ -65,7 +71,7 @@ function compareCandidateLayouts(
   return left.signature.localeCompare(right.signature);
 }
 
-function mergeParetoFrontiers(
+export function mergeParetoFrontiers(
   left: readonly CandidateLayout[],
   right: readonly CandidateLayout[],
   stats?: OptimalLayoutCalculationStats,
@@ -93,7 +99,7 @@ function mergeParetoFrontiers(
   return frontier;
 }
 
-function idealWidth(context: LayoutCalculationContext, lineCount: number): number {
+export function idealWidth(context: LayoutCalculationContext, lineCount: number): number {
   if (lineCount === 0) return 0;
   const breakCount = Math.max(0, lineCount - 1);
   const spacesRemovedAtBreaks = context.candidates.every(({ offset }) =>
@@ -115,7 +121,9 @@ export function layoutAtBreaks(
   unmatchedPenalty = Math.max(0, ...context.candidates.map(({ penalty }) => penalty)),
 ): InternalLayout {
   const lines = splitAtOffsets(context.text, breakOffsets);
-  const widths = lines.map(context.measureText);
+  const widths = context.measureTexts
+    ? [...context.measureTexts(lines)]
+    : lines.map(context.measureText);
   const candidates = new Map(context.candidates.map((candidate) => [candidate.offset, candidate]));
   const breaks = breakOffsets.map(
     (offset): BreakCandidate =>
@@ -148,6 +156,13 @@ export function calculateOptimalLayouts(
   context: LayoutCalculationContext,
   stats?: OptimalLayoutCalculationStats,
 ): LineBreakLayoutCandidate[] {
+  return finishSteps(calculateOptimalLayoutSteps(context, stats));
+}
+
+export function* calculateOptimalLayoutSteps(
+  context: SegmentMeasurementContext,
+  stats?: OptimalLayoutCalculationStats,
+): Generator<void, LineBreakLayoutCandidate[], void> {
   if (context.text === "") return [{ breaks: [] }];
   const boundaries = context.candidates;
   const positions = [0, ...boundaries.map(({ offset }) => nextTextOffset(context.text, offset))];
@@ -158,15 +173,58 @@ export function calculateOptimalLayouts(
     );
   const segmentWidths: number[] = [];
   const segmentRowOffsets = new Uint32Array(positions.length + 1);
+  const segmentRange = (start: number, end: number): readonly [number, number] =>
+    [positions[start]!, boundaries[end]?.offset ?? context.text.length];
 
-  for (let start = 0; start < positions.length; start += 1) {
-    segmentRowOffsets[start] = segmentWidths.length;
-    for (let end = start; end < positions.length; end += 1) {
-      if (stats) stats.measuredSegments += 1;
-      const width = context.measureText(segmentText(start, end));
-      segmentWidths.push(width);
-      if (stats) stats.allocatedSegmentWidthSlots += 1;
-      if (width > context.maxWidth + EPSILON) break;
+  if (context.measureTexts) {
+    // Advance independent starts together, stopping each at exactly the same first
+    // overflow as the scalar path. No speculative segments or candidate pruning.
+    // Only this block's rows are buffered; flattened storage remains unchanged.
+    const batchSize = 64;
+    for (let block = 0; block < positions.length; block += batchSize) {
+      const rows: number[][] = Array.from(
+        { length: Math.min(batchSize, positions.length - block) },
+        () => [],
+      );
+      let active = rows.map((_, index) => block + index);
+      while (active.length > 0) {
+        const widths = context.measureSegments
+          ? context.measureSegments(active.map((start) => segmentRange(start, start + rows[start - block]!.length)))
+          : context.measureTexts(active.map((start) => segmentText(start, start + rows[start - block]!.length)));
+        const next: number[] = [];
+        active.forEach((start, index) => {
+          const row = rows[start - block]!;
+          const width = widths[index]!;
+          row.push(width);
+          if (stats) {
+            stats.measuredSegments += 1;
+            stats.allocatedSegmentWidthSlots += 1;
+          }
+          if (width <= context.maxWidth + EPSILON && start + row.length < positions.length) {
+            next.push(start);
+          }
+        });
+        active = next;
+        yield;
+      }
+      rows.forEach((row, index) => {
+        segmentRowOffsets[block + index] = segmentWidths.length;
+        for (const width of row) segmentWidths.push(width);
+      });
+    }
+  } else {
+    for (let start = 0; start < positions.length; start += 1) {
+      segmentRowOffsets[start] = segmentWidths.length;
+      for (let end = start; end < positions.length; end += 1) {
+        if (stats) stats.measuredSegments += 1;
+        const width = context.measureSegments
+          ? context.measureSegments([segmentRange(start, end)])[0]!
+          : context.measureText(segmentText(start, end));
+        segmentWidths.push(width);
+        if (stats) stats.allocatedSegmentWidthSlots += 1;
+        yield;
+        if (width > context.maxWidth + EPSILON) break;
+      }
     }
   }
   segmentRowOffsets[positions.length] = segmentWidths.length;
@@ -174,6 +232,7 @@ export function calculateOptimalLayouts(
   const minimumLines = new Array<number>(positions.length + 1).fill(Number.POSITIVE_INFINITY);
   minimumLines[positions.length] = 0;
   for (let start = positions.length - 1; start >= 0; start -= 1) {
+    yield;
     const rowStart = segmentRowOffsets[start]!;
     const rowEnd = segmentRowOffsets[start + 1]!;
     for (let index = rowStart; index < rowEnd; index += 1) {
@@ -191,7 +250,7 @@ export function calculateOptimalLayouts(
   const targetWidth = idealWidth(context, lineCount);
   const memo = new Map<string, CandidateLayout[]>();
 
-  function solve(start: number, remainingLines: number): CandidateLayout[] {
+  function* solve(start: number, remainingLines: number): Generator<void, CandidateLayout[], void> {
     const key = `${start}:${remainingLines}`;
     const cached = memo.get(key);
     if (cached) {
@@ -218,6 +277,7 @@ export function calculateOptimalLayouts(
     const rowStart = segmentRowOffsets[start]!;
     const rowEnd = segmentRowOffsets[start + 1]!;
     for (let index = rowStart; index < rowEnd; index += 1) {
+      yield;
       const end = start + index - rowStart;
       const width = segmentWidths[index]!;
       if (width > context.maxWidth + EPSILON) break;
@@ -232,11 +292,12 @@ export function calculateOptimalLayouts(
         if (stats) stats.prunedTransitions += 1;
         continue;
       }
-      const rest = solve(nextStart, nextRemainingLines);
+      const rest = yield* solve(nextStart, nextRemainingLines);
       const selectedBreak = isLastLine ? undefined : boundaries[end];
       const normalizedDeviation = (width - targetWidth) / context.maxWidth;
       const layouts: CandidateLayout[] = [];
       for (const suffix of rest) {
+        if (layouts.length % 64 === 0) yield;
         const breaks = selectedBreak ? [selectedBreak, ...suffix.breaks] : suffix.breaks;
         layouts.push({
           breaks,
@@ -260,7 +321,7 @@ export function calculateOptimalLayouts(
     return frontier;
   }
 
-  const layouts = solve(0, lineCount);
+  const layouts = yield* solve(0, lineCount);
   if (layouts.length === 0) return [{ breaks: [] }];
   return layouts.map((layout) => ({
     breaks: layout.breaks.map(({ offset }) => offset),

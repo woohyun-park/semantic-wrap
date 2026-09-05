@@ -36,8 +36,18 @@ Bun.serve({
         headers: { "content-type": "text/javascript; charset=utf-8" },
       });
     }
+    if (pathname === "/client-before.js" && process.env.SEMANTIC_WRAP_RESIZE_BASELINE) {
+      return new Response(Bun.file(process.env.SEMANTIC_WRAP_RESIZE_BASELINE), {
+        headers: { "content-type": "text/javascript; charset=utf-8" },
+      });
+    }
     if (pathname === "/") {
-      return new Response(html, {
+      const before = new URL(request.url).searchParams.has("before");
+      if (before && !process.env.SEMANTIC_WRAP_RESIZE_BASELINE) {
+        return new Response("SEMANTIC_WRAP_RESIZE_BASELINE is required for before comparisons", { status: 400 });
+      }
+      return new Response(before && process.env.SEMANTIC_WRAP_RESIZE_BASELINE
+        ? html.replace("/client.js", "/client-before.js") : html, {
         headers: { "content-type": "text/html; charset=utf-8" },
       });
     }
