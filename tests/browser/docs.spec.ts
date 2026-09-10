@@ -6,6 +6,41 @@ const landingUrl = "http://127.0.0.1:4192/ko";
 const englishDocsUrl = "http://127.0.0.1:4192/docs/introduction";
 const englishLandingUrl = "http://127.0.0.1:4192/";
 
+test("serves localized sharing metadata and its image without JavaScript", async ({ browser, request }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  try {
+    for (const [path, language, title, canonical] of [
+      ["/", "en", "semantic-wrap — line breaks that preserve meaning", "/"],
+      ["/ko", "ko", "semantic-wrap — 의미를 지키는 줄바꿈", "/ko"],
+      ["/ko/?shared=1", "ko", "semantic-wrap — 의미를 지키는 줄바꿈", "/ko"],
+      ["/docs/introduction", "en", "Introduction | semantic-wrap docs", "/docs/introduction"],
+      ["/ko/docs/introduction", "ko", "semantic-wrap 소개 | 문서", "/ko/docs/introduction"],
+    ]) {
+      const response = await page.goto(`http://127.0.0.1:4192${path}`);
+      expect(response?.ok()).toBe(true);
+      await expect(page.locator("html")).toHaveAttribute("lang", language!);
+      await expect(page).toHaveTitle(title!);
+      await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", title!);
+      await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", `https://semantic-wrap.woohyunpark.xyz${canonical}`);
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://semantic-wrap.woohyunpark.xyz${canonical}`);
+      await expect(page.locator('meta[property="og:description"]')).toHaveAttribute("content",
+        language === "ko" ? /학습된 모델/ : /A JavaScript library/);
+      await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", "https://semantic-wrap.woohyunpark.xyz/og-image.png");
+      await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image");
+    }
+    const image = await request.get("http://127.0.0.1:4192/og-image.png");
+    expect(image.ok()).toBe(true);
+    expect(image.headers()["content-type"]).toContain("image/png");
+    const bytes = await image.body();
+    expect(bytes.subarray(1, 4).toString()).toBe("PNG");
+    expect(bytes.readUInt32BE(16)).toBe(1200);
+    expect(bytes.readUInt32BE(20)).toBe(630);
+  } finally {
+    await context.close();
+  }
+});
+
 test("serves AI-readable documentation entrypoints", async ({ request }) => {
   const summary = await request.get("http://127.0.0.1:4192/llms.txt");
   const full = await request.get("http://127.0.0.1:4192/llms-full.txt");

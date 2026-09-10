@@ -29,11 +29,9 @@ import { LocalizedSemanticWrap } from "./LocalizedSemanticWrap";
 import { easeOutExpo, revealMotion } from "./motion-values";
 import { SiteFooter, SiteHeader } from "./site";
 import { titleModels } from "./site-models";
+import { siteMetadata } from "./site-metadata";
 import {
-  docsPath,
-  landingPath,
   localeFromPath,
-  productionUrl,
   type SiteLocale,
 } from "./site-config";
 
@@ -776,31 +774,22 @@ export function App() {
   useInitialLandingHash(!isDocs);
 
   useEffect(() => {
-    const canonicalPath = isDocs ? docsPath(locale) : landingPath(locale);
-    const alternateLocale = locale === "en" ? "ko" : "en";
-    const alternatePath = isDocs ? docsPath(alternateLocale) : landingPath(alternateLocale);
-    const description = locale === "ko"
-      ? "학습된 모델과 실제 렌더링 결과를 바탕으로 더 자연스러운 줄바꿈을 선택하는 JavaScript 라이브러리"
-      : "A JavaScript library that selects natural line breaks from a trained model and the actual rendered layout.";
-
-    document.documentElement.lang = locale;
-    document.title = isDocs
-      ? locale === "ko" ? "semantic-wrap 소개 | 문서" : "Introduction | semantic-wrap docs"
-      : locale === "ko" ? "semantic-wrap — 의미를 지키는 줄바꿈" : "semantic-wrap — line breaks that preserve meaning";
-    document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", description);
+    const metadata = siteMetadata(window.location.pathname);
+    document.documentElement.lang = metadata.locale;
+    document.title = metadata.title;
+    for (const attributes of metadata.meta) {
+      const key = attributes.property ? "property" : "name";
+      document.querySelector(`meta[${key}="${attributes[key]}"]`)
+        ?.setAttribute("content", attributes.content);
+    }
 
     document.querySelectorAll("link[data-semantic-wrap-locale]").forEach((link) => link.remove());
-    for (const attributes of [
-      { rel: "canonical", href: `${productionUrl}${canonicalPath}` },
-      { rel: "alternate", href: `${productionUrl}${locale === "en" ? canonicalPath : alternatePath}`, hrefLang: "en" },
-      { rel: "alternate", href: `${productionUrl}${locale === "ko" ? canonicalPath : alternatePath}`, hrefLang: "ko" },
-      { rel: "alternate", href: `${productionUrl}${locale === "en" ? canonicalPath : alternatePath}`, hrefLang: "x-default" },
-    ]) {
+    for (const attributes of metadata.links) {
       const link = document.createElement("link");
       link.dataset.semanticWrapLocale = "true";
       link.rel = attributes.rel;
       link.href = attributes.href;
-      if (attributes.hrefLang) link.hreflang = attributes.hrefLang;
+      if (attributes.hreflang) link.hreflang = attributes.hreflang;
       document.head.append(link);
     }
   }, [isDocs, locale]);
