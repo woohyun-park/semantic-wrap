@@ -17,6 +17,18 @@
   ],
   "rewrites": [
     {
+      "source": "/ko/docs/:path*",
+      "destination": "/ko/docs/introduction/index.html"
+    },
+    {
+      "source": "/ko/:path*",
+      "destination": "/ko/index.html"
+    },
+    {
+      "source": "/docs/:path*",
+      "destination": "/docs/introduction/index.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
