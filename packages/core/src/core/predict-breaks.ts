@@ -1,6 +1,11 @@
 import { validatePhraseModel } from "./phrase-model.js";
 import type { BreakPrediction, PhraseModel } from "./types.js";
 
+/** A whitespace run allows a break only if it has a space other than U+00A0, U+2007, U+202F, or U+FEFF. */
+function isBreakableRun(run: string): boolean {
+  return /[^   ﻿]/u.test(run);
+}
+
 function spaceOffsets(text: string): number[] {
   const result: number[] = [];
   let offset = 0;
@@ -11,7 +16,9 @@ function spaceOffsets(text: string): number[] {
     }
     const runStart = offset;
     while (offset < text.length && /\s/u.test(text[offset]!)) offset += 1;
-    if (runStart > 0 && offset < text.length) result.push(runStart);
+    if (runStart > 0 && offset < text.length && isBreakableRun(text.slice(runStart, offset))) {
+      result.push(runStart);
+    }
   }
   return result;
 }
@@ -38,7 +45,9 @@ function characterOffsets(text: string): number[] {
     if (offset <= 0) continue;
     let next = offset;
     while (next < text.length && /\s/u.test(text[next]!)) next += 1;
-    if (next < text.length) offsets.add(offset);
+    if (next < text.length && (next === offset || isBreakableRun(text.slice(offset, next)))) {
+      offsets.add(offset);
+    }
   }
   return [...offsets].sort((left, right) => left - right);
 }

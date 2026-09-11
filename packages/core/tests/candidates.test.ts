@@ -182,6 +182,45 @@ describe("candidate aggregation", () => {
     }
   });
 
+  test("excludes whitespace runs made only of non-breaking spaces", () => {
+    const cases = [
+      ["spaces", "가격은 100 000원", []],
+      ["spaces", "10 km 달리기", [5]],
+      ["spaces", "A B C", [3]],
+      ["spaces", "A﻿B C", [3]],
+      ["characters", "가나 다라", [1, 4]],
+      ["characters", "가  나", [1]],
+    ] as const;
+
+    for (const [boundaryMode, text, offsets] of cases) {
+      const model = {
+        boundaryMode,
+        levels: [{ predictor: createBudouxPredictor({}), penalty: 0 }],
+        fallbackPenalty: 1,
+      } as const;
+      const result = selectLineBreaks(
+        { text, model, maxWidth: 100, measureText },
+        { diagnostics: true },
+      );
+      expect(result.diagnostics.candidates.map(({ offset }) => offset)).toEqual([...offsets]);
+    }
+  });
+
+  test("keeps overflowing text joined by non-breaking spaces on one line", () => {
+    const model = {
+      boundaryMode: "spaces",
+      levels: [{ predictor: createBudouxPredictor({}), penalty: 0 }],
+      fallbackPenalty: 1,
+    } as const;
+    const result = selectLineBreaks(
+      { text: "출시일은 2026년 9월 11일", model, maxWidth: 8, measureText },
+      { nativeLayout: { breaks: [] } },
+    );
+
+    expect(result.breaks).toEqual([]);
+    expect(result.applied).toBe(false);
+  });
+
   test("uses grapheme boundaries for character mode", () => {
     const model = {
       boundaryMode: "characters",
