@@ -22,18 +22,14 @@ import {
   useReducedMotion as usePrefersReducedMotion,
   useScroll,
 } from "motion/react";
-import { DocsApp } from "./Docs";
+import "@fontsource-variable/noto-sans-kr";
 import { IntroStory } from "./IntroStory";
 import { landingContent, type LandingContent } from "./landing-content";
 import { LocalizedSemanticWrap } from "./LocalizedSemanticWrap";
 import { easeOutExpo, revealMotion } from "./motion-values";
 import { SiteFooter, SiteHeader } from "./site";
-import { titleModels } from "./site-models";
-import { siteMetadata } from "./site-metadata";
-import {
-  localeFromPath,
-  type SiteLocale,
-} from "./site-config";
+import { useTitleModel } from "./site-models";
+import type { SiteLocale } from "./site-config";
 
 function availableMeasureWidth(paneBody: HTMLElement): number {
   const styles = window.getComputedStyle(paneBody);
@@ -216,7 +212,7 @@ function renderSemanticDiff(
 function Playground({ locale }: { locale: SiteLocale }) {
   const content = landingContent[locale];
   const { examples, playground } = content;
-  const model = titleModels[locale];
+  const model = useTitleModel(locale);
   const paneBodyRef = useRef<HTMLDivElement>(null);
   const dragPointerRef = useRef<number | null>(null);
   const dragContentLeftRef = useRef<number | null>(null);
@@ -337,7 +333,7 @@ function Playground({ locale }: { locale: SiteLocale }) {
                 }}
               >
                 <span className="gradient-text-safe">{playground.example} 0{index + 1}</span>
-                <SemanticWrap model={model}>
+                <SemanticWrap model={model} initial="native">
                   <strong>{example.text}</strong>
                 </SemanticWrap>
               </button>
@@ -621,7 +617,7 @@ function ProcessStage({ activeStep, locale }: { activeStep: number; locale: Site
   const processMeasureWidth = content.process.measureWidth;
   const { ref, selection, diagnostics } = useSemanticWrap({
     text: processExampleText,
-    model: titleModels[locale],
+    model: useTitleModel(locale),
     diagnostics: true,
   });
   const currentSelection = selection?.text === processExampleText ? selection : null;
@@ -764,37 +760,8 @@ function ProcessSection({ locale }: { locale: SiteLocale }) {
   );
 }
 
-export function App() {
-  const locale = localeFromPath(window.location.pathname);
-  const isDocs = window.location.pathname === "/docs"
-    || window.location.pathname.startsWith("/docs/")
-    || window.location.pathname === "/ko/docs"
-    || window.location.pathname.startsWith("/ko/docs/");
-
-  useInitialLandingHash(!isDocs);
-
-  useEffect(() => {
-    const metadata = siteMetadata(window.location.pathname);
-    document.documentElement.lang = metadata.locale;
-    document.title = metadata.title;
-    for (const attributes of metadata.meta) {
-      const key = attributes.property ? "property" : "name";
-      document.querySelector(`meta[${key}="${attributes[key]}"]`)
-        ?.setAttribute("content", attributes.content);
-    }
-
-    document.querySelectorAll("link[data-semantic-wrap-locale]").forEach((link) => link.remove());
-    for (const attributes of metadata.links) {
-      const link = document.createElement("link");
-      link.dataset.semanticWrapLocale = "true";
-      link.rel = attributes.rel;
-      link.href = attributes.href;
-      if (attributes.hreflang) link.hreflang = attributes.hreflang;
-      document.head.append(link);
-    }
-  }, [isDocs, locale]);
-
-  if (isDocs) return <DocsApp locale={locale} />;
+export function App({ locale }: { locale: SiteLocale }) {
+  useInitialLandingHash(true);
 
   const skipLabel = locale === "ko" ? "본문으로 바로가기" : "Skip to content";
 

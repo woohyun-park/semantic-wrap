@@ -1,4 +1,4 @@
-import { docsPath, landingPath, localeFromPath, productionUrl } from "./site-config";
+import { docsPath, landingPath, localeFromPath, productionUrl } from "./site-config.ts";
 
 export function siteMetadata(pathname: string) {
   const locale = localeFromPath(pathname);
@@ -8,8 +8,12 @@ export function siteMetadata(pathname: string) {
     ? locale === "ko" ? "semantic-wrap 소개 | 문서" : "Introduction | semantic-wrap docs"
     : locale === "ko" ? "semantic-wrap — 의미를 지키는 줄바꿈" : "semantic-wrap — line breaks that preserve meaning";
   const description = locale === "ko"
-    ? "학습된 모델과 실제 렌더링 결과를 바탕으로 더 자연스러운 줄바꿈을 선택하는 JavaScript 라이브러리"
-    : "A JavaScript library that selects natural line breaks from a trained model and the actual rendered layout.";
+    ? isDocs
+      ? "semantic-wrap 설치와 사용법: React 연동, Core API, 줄바꿈 전략, 한국어·영어 모델과 진단 기능을 예제로 알아보세요."
+      : "학습된 모델과 실제 렌더링 결과로 한국어·영어의 의미를 지키는 JavaScript 줄바꿈 라이브러리. CSS balance와 직접 비교해 보세요."
+    : isDocs
+      ? "Install and use semantic-wrap with React or JavaScript. Explore Core APIs, line-break strategies, English and Korean models, and diagnostics with examples."
+      : "A JavaScript library for natural English and Korean line breaks, using a trained model and rendered layout. Compare semantic-wrap with CSS text-wrap: balance.";
   const image = `${productionUrl}/og-image.png`;
   const imageAlt = locale === "ko"
     ? "semantic-wrap 로고와 Line breaks, naturally 문구"

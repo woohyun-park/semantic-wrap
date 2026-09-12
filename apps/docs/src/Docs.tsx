@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { animate, type AnimationPlaybackControls } from "motion";
+import "./docs.css";
 import {
   CopyIcon,
   SiteFooter,
@@ -19,6 +20,7 @@ import {
   copyText,
   docsPath,
   repositoryUrl,
+  siteNavigationEvent,
   type SiteLocale,
 } from "./site-config";
 
@@ -425,12 +427,7 @@ function useActiveDocsHref(locale: SiteLocale) {
   const navigationAnimationRef = useRef<AnimationPlaybackControls | null>(null);
   const restoreScrollBehaviorRef = useRef<(() => void) | null>(null);
   const navigationTargetIdRef = useRef<string | null>(null);
-  const [activeHref, setActiveHref] = useState(() => {
-    const candidate = `${introductionPath}${window.location.hash}`;
-    return navigationLinks.some((link) => link.href === candidate)
-      ? candidate
-      : introductionPath;
-  });
+  const [activeHref, setActiveHref] = useState(introductionPath);
 
   useEffect(() => {
     let animationFrame = 0;
@@ -640,6 +637,7 @@ function DocsNavigation({
     onNavigate(href, targetId);
     if (`${window.location.pathname}${window.location.hash}` !== `${url.pathname}${url.hash}`) {
       window.history.pushState(null, "", `${url.pathname}${url.hash}`);
+      window.dispatchEvent(new Event(siteNavigationEvent));
     }
   }
 

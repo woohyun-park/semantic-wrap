@@ -1,11 +1,17 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { siteMetadataPlugin } from "./site-metadata-plugin";
+import { siteMetadataPlugin } from "./site-metadata-plugin.ts";
 
 const source = (path: string) => new URL(`../../${path}`, import.meta.url).pathname;
 
 export default defineConfig({
+  appType: "mpa",
   plugins: [react(), siteMetadataPlugin()],
+  define: {
+    __VERCEL_DEPLOYMENT__: JSON.stringify(process.env.VERCEL === "1"),
+  },
+  build: { manifest: true },
+  ssr: { noExternal: ["motion", "@vercel/analytics"] },
   resolve: {
     alias: {
       "@semantic-wrap/core": source("packages/core/src/index.ts"),

@@ -1,8 +1,9 @@
-import corePackage from "../../../packages/core/package.json";
+import corePackage from "../../../packages/core/package.json" with { type: "json" };
 
 export const repositoryUrl = "https://github.com/woohyun-park/semantic-wrap";
 export const siteVersion = `v${corePackage.version}`;
 export const productionUrl = "https://semantic-wrap.woohyunpark.xyz";
+export const siteNavigationEvent = "semantic-wrap:navigation";
 
 export type SiteLocale = "en" | "ko";
 
