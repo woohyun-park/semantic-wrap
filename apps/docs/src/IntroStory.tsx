@@ -30,7 +30,7 @@ import {
   type LineBreakExample,
 } from "./landing-content";
 import { SceneFrame, ShimmerText } from "./motion";
-import { titleModels } from "./site-models";
+import { useTitleModel } from "./site-models";
 import {
   ArrowIcon,
   BrandLockup,
@@ -119,7 +119,10 @@ function useIntroTimeline(
   scenes: readonly IntroScene[],
   timelineUnits: number,
 ) {
-  const shouldReduceMotion = Boolean(useReducedMotion());
+  const preference = useReducedMotion();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const shouldReduceMotion = mounted && Boolean(preference);
   const { scrollYProgress } = useScroll({
     target: storyRef,
     offset: ["start start", "end end"],
@@ -273,7 +276,7 @@ function InstallCommand({ content }: { content: LandingContent }) {
       type="button"
       className={`quick-install${copyState === "idle" ? "" : ` is-${copyState}`}`}
       onClick={copyCommand}
-      aria-label={content.intro.copy}
+      aria-label={`${content.intro.copy}: ${content.intro.installCommand}`}
       animate={copyState === "copied" ? { scale: [1, 0.97, 1] } : { scale: 1 }}
       transition={{ duration: 0.26, ease: easeOutExpo }}
     >
@@ -343,7 +346,7 @@ function LineBreakHeadline({
 }) {
   const { ref, selection, diagnostics } = useSemanticWrap({
     text: example.text,
-    model: titleModels[locale],
+    model: useTitleModel(locale),
     diagnostics: true,
   });
   const currentSelection = selection?.text === example.text ? selection : null;
@@ -486,6 +489,9 @@ function HeroScene({ content, direction, locale, staticScene }: SceneViewProps) 
     >
       <div className="hero-brand-content">
         <BrandLockup className="hero-brand-lockup" priority />
+        <h1 className="hero-description">{locale === "ko"
+          ? "한국어와 영어의 의미를 지키는 자연스러운 줄바꿈"
+          : "Natural line breaks for English and Korean"}</h1>
         <InstallCommand content={content} />
         <StartAction content={content} locale={locale} />
       </div>
@@ -661,7 +667,6 @@ export function IntroStory({ locale }: { locale: SiteLocale }) {
     >
       <span className="hero-brand-visibility-sentinel" aria-hidden="true" />
       <motion.div className="intro-story-pin" layoutRoot>
-        <h1 className="visually-hidden">semantic-wrap</h1>
         <div
           className="intro-story-stack"
           data-direction={playback.direction === 1 ? "forward" : "backward"}

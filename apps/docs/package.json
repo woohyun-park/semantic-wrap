@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --ssr src/entry-server.tsx --outDir ../../.cache/docs-ssr --emptyOutDir && bun prerender.ts",
     "dev": "vite",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
@@ -15,6 +15,7 @@
     "@semantic-wrap/en": "workspace:*",
     "@semantic-wrap/ko": "workspace:*",
     "@semantic-wrap/react": "workspace:*",
+    "@vercel/analytics": "^2.0.1",
     "motion": "^13.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"

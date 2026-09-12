@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { exampleCases } from "../../apps/docs/src/example-cases";
 
 const docsUrl = "http://127.0.0.1:4192/ko/docs/introduction";
@@ -25,7 +26,7 @@ test("serves localized sharing metadata and its image without JavaScript", async
       await expect(page.locator('meta[property="og:url"]')).toHaveAttribute("content", `https://semantic-wrap.woohyunpark.xyz${canonical}`);
       await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://semantic-wrap.woohyunpark.xyz${canonical}`);
       await expect(page.locator('meta[property="og:description"]')).toHaveAttribute("content",
-        language === "ko" ? /학습된 모델/ : /A JavaScript library/);
+        path.includes("/docs/") ? /semantic-wrap/ : language === "ko" ? /학습된 모델/ : /A JavaScript library/);
       await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", "https://semantic-wrap.woohyunpark.xyz/og-image.png");
       await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image");
     }
@@ -39,6 +40,95 @@ test("serves localized sharing metadata and its image without JavaScript", async
   } finally {
     await context.close();
   }
+});
+
+test("serves readable content and navigation without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  try {
+    for (const path of ["/", "/ko", "/docs/introduction", "/ko/docs/introduction"]) {
+      await page.goto(`http://127.0.0.1:4192${path}`);
+      await expect(page.locator("main")).toBeVisible();
+      await expect(page.locator("h1")).toBeVisible();
+      expect(await page.locator("main").innerText()).toContain("semantic-wrap");
+      for (const heading of await page.locator("main h2").all()) {
+        await expect(heading).toHaveCSS("opacity", "1");
+      }
+      const alternate = page.locator(".locale-link");
+      await alternate.click();
+      await expect(page.locator("html")).toHaveAttribute("lang", path.startsWith("/ko") ? "en" : "ko");
+    }
+  } finally { await context.close(); }
+});
+
+test("serves crawler files, canonical redirects, and actual missing-page responses", async ({ request }) => {
+  const origin = "http://127.0.0.1:4192";
+  const robots = await request.get(`${origin}/robots.txt`);
+  expect(robots.status()).toBe(200);
+  expect(robots.headers()["content-type"]).toContain("text/plain");
+  expect(await robots.text()).toContain("Sitemap: https://semantic-wrap.woohyunpark.xyz/sitemap.xml");
+  const sitemap = await request.get(`${origin}/sitemap.xml`);
+  expect(sitemap.status()).toBe(200);
+  expect(sitemap.headers()["content-type"]).toContain("xml");
+  expect((await sitemap.text()).match(/<loc>/g)).toHaveLength(4);
+  for (const path of ["/missing", "/docs/missing", "/ko/missing", "/ko/docs/missing", "/assets/missing.js"]) {
+    expect((await request.get(`${origin}${path}`)).status()).toBe(404);
+  }
+  for (const [path, target] of [["/docs", "/docs/introduction"], ["/ko/docs", "/ko/docs/introduction"], ["/ko/", "/ko"]]) {
+    const redirect = await request.get(`${origin}${path}?shared=1`, { maxRedirects: 0 });
+    expect(redirect.status()).toBe(308);
+    expect(redirect.headers().location).toBe(`${target}?shared=1`);
+  }
+});
+
+test("hydrates all routes and motion preferences without replacing server content", async ({ browser }) => {
+  for (const reducedMotion of ["reduce", "no-preference"] as const) {
+    const context = await browser.newContext({ reducedMotion });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", error => errors.push(error.message));
+    page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
+    try {
+      for (const path of ["/", "/ko", "/docs/introduction#strategies", "/ko/docs/introduction#strategies"]) {
+        await page.goto(`http://127.0.0.1:4192${path}`);
+        // Header's hash synchronization is an observable post-hydration effect.
+        if (path.includes("#")) await expect(page.locator(".locale-link")).toHaveAttribute("href", /#strategies$/);
+        else await expect(page.locator(".process-stage-status")).not.toHaveText("");
+        expect(errors).toEqual([]);
+      }
+    } finally { await context.close(); }
+  }
+});
+
+test("loads only the requested page assets and language model", async ({ browser }) => {
+  const manifest = JSON.parse(await readFile(new URL("../../apps/docs/dist/.vite/manifest.json", import.meta.url), "utf8"));
+  for (const path of ["/", "/ko", "/docs/introduction", "/ko/docs/introduction"]) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const requests = new Set<string>();
+    page.on("request", request => requests.add(new URL(request.url()).pathname.slice(1)));
+    try {
+      const locale = path.startsWith("/ko") ? "ko" : "en";
+      const isDocs = path.includes("/docs/");
+      const expectedModel = manifest[`../../packages/${locale}/src/index.ts`].file;
+      const excludedModel = manifest[`../../packages/${locale === "ko" ? "en" : "ko"}/src/index.ts`].file;
+      const excludedPage = manifest[isDocs ? "src/App.tsx" : "src/Docs.tsx"];
+      await page.goto(`http://127.0.0.1:4192${path}`);
+      await expect.poll(() => requests.has(expectedModel)).toBe(true);
+      expect(requests.has(excludedModel)).toBe(false);
+      for (const file of [excludedPage.file, ...excludedPage.css]) expect(requests.has(file)).toBe(false);
+      if (isDocs) expect([...requests].some(file => file.endsWith(".woff2"))).toBe(false);
+    } finally { await context.close(); }
+  }
+});
+
+test("keeps locale links current after document navigation and history changes", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(englishDocsUrl);
+  await page.locator('.docs-sidebar a[href$="#strategies"]').click();
+  await expect(page.locator(".locale-link")).toHaveAttribute("href", "/ko/docs/introduction#strategies");
+  await page.goBack();
+  await expect(page.locator(".locale-link")).toHaveAttribute("href", "/ko/docs/introduction");
 });
 
 test("serves AI-readable documentation entrypoints", async ({ request }) => {

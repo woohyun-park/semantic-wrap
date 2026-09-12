@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import brandMarkUrl from "./brand-mark.webp";
 import {
-  alternateLocalePath,
   docsPath,
   landingPath,
   repositoryUrl,
   siteVersion,
+  siteNavigationEvent,
   type SiteLocale,
 } from "./site-config";
 
@@ -91,6 +91,20 @@ export function SiteHeader({
   locale: SiteLocale;
 }) {
   const [isBrandHidden, setIsBrandHidden] = useState(Boolean(hideBrandWhile));
+  const [hash, setHash] = useState("");
+
+  useEffect(() => {
+    const syncHash = () => setHash(window.location.hash);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    window.addEventListener("popstate", syncHash);
+    window.addEventListener(siteNavigationEvent, syncHash);
+    return () => {
+      window.removeEventListener("hashchange", syncHash);
+      window.removeEventListener("popstate", syncHash);
+      window.removeEventListener(siteNavigationEvent, syncHash);
+    };
+  }, []);
 
   useEffect(() => {
     if (!hideBrandWhile) {
@@ -112,7 +126,9 @@ export function SiteHeader({
     return () => observer.disconnect();
   }, [hideBrandWhile]);
 
-  const alternateHref = `${alternateLocalePath(window.location.pathname, locale)}${current ? window.location.hash : ""}`;
+  const alternateLocale = locale === "ko" ? "en" : "ko";
+  const alternatePath = current ? docsPath(alternateLocale) : landingPath(alternateLocale);
+  const alternateHref = `${alternatePath}${current ? hash : ""}`;
   const copy = locale === "ko"
     ? { docs: "문서", github: "GitHub 저장소", home: "semantic-wrap 홈", nav: "주요 메뉴", switch: "EN" }
     : { docs: "Docs", github: "GitHub repository", home: "semantic-wrap home", nav: "Primary navigation", switch: "한국어" };
@@ -137,7 +153,7 @@ export function SiteHeader({
             >
               {copy.docs}
             </a>
-            <a className="locale-link" href={alternateHref} hrefLang={locale === "ko" ? "en" : "ko"}>
+            <a className="locale-link" href={alternateHref} hrefLang={alternateLocale}>
               {copy.switch}
             </a>
           </nav>

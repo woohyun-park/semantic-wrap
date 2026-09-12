@@ -366,7 +366,7 @@
 }
 
 .docs-code-block .token-comment {
-  color: #6f7b8f;
+  color: var(--ink-500);
   font-style: italic;
 }
 

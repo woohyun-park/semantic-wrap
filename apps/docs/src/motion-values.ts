@@ -13,7 +13,7 @@ export const headlineLayoutTransition: Transition = {
 };
 
 export const revealMotion = {
-  initial: { opacity: 0, y: 40 },
+  initial: false,
   whileInView: { opacity: 1, y: 0 },
   viewport: { amount: 0.35, once: true },
   transition: { duration: 0.5, ease: easeOutExpo },
