@@ -1,7 +1,7 @@
 import { SemanticWrap } from "@semantic-wrap/react";
 import type { ReactElement } from "react";
 import type { SiteLocale } from "./site-config";
-import { titleModels } from "./site-models";
+import { useTitleModel } from "./site-models";
 
 export function LocalizedSemanticWrap({
   children,
@@ -10,5 +10,6 @@ export function LocalizedSemanticWrap({
   children: ReactElement<{ children?: string }>;
   locale: SiteLocale;
 }) {
-  return <SemanticWrap model={titleModels[locale]}>{children}</SemanticWrap>;
+  const model = useTitleModel(locale);
+  return <SemanticWrap model={model} initial="native">{children}</SemanticWrap>;
 }

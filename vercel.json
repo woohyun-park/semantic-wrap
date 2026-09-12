@@ -4,6 +4,16 @@
   "installCommand": "bunx bun@1.4.0 install --frozen-lockfile",
   "buildCommand": "bun run site:build",
   "outputDirectory": "apps/docs/dist",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "redirects": [
+    { "source": "/docs", "destination": "/docs/introduction", "permanent": true },
+    { "source": "/ko/docs", "destination": "/ko/docs/introduction", "permanent": true },
+    { "source": "/index", "destination": "/", "permanent": true },
+    { "source": "/ko/index", "destination": "/ko", "permanent": true },
+    { "source": "/docs/introduction/index", "destination": "/docs/introduction", "permanent": true },
+    { "source": "/ko/docs/introduction/index", "destination": "/ko/docs/introduction", "permanent": true }
+  ],
   "headers": [
     {
       "source": "/assets/(.*)",
@@ -17,20 +27,16 @@
   ],
   "rewrites": [
     {
-      "source": "/ko/docs/:path*",
-      "destination": "/ko/docs/introduction/index.html"
+      "source": "/ko/docs/introduction",
+      "destination": "/ko/docs/introduction/index"
     },
     {
-      "source": "/ko/:path*",
-      "destination": "/ko/index.html"
+      "source": "/ko",
+      "destination": "/ko/index"
     },
     {
-      "source": "/docs/:path*",
-      "destination": "/docs/introduction/index.html"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/docs/introduction",
+      "destination": "/docs/introduction/index"
     }
   ]
 }

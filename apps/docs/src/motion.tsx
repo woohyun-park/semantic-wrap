@@ -32,7 +32,7 @@ export function SceneFrame({
       aria-hidden={!current}
       custom={direction}
       variants={sceneVariants}
-      initial={staticScene ? false : "enter"}
+      initial={staticScene || props.className?.includes("hero-brand-stage") ? false : "enter"}
       animate={staticScene ? undefined : "center"}
       exit={staticScene ? undefined : "exit"}
     >
