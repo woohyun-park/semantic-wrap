@@ -47,8 +47,8 @@ For missing browser binaries, install them with
 ## Performance and diagnostics
 
 `bench:*` and `record:*` browser commands use only the package fixture server. Run a
-benchmark only for a performance question, with its documented inputs and a frozen
-baseline where required. Resize comparisons need `SEMANTIC_WRAP_RESIZE_BASELINE`;
+benchmark whenever a claim about speed or layout quality needs evidence, with its
+documented inputs and a frozen baseline where required. Resize comparisons need `SEMANTIC_WRAP_RESIZE_BASELINE`;
 scheduling comparisons also need `SEMANTIC_WRAP_OPTIONS_BASELINE`. See the relevant
 report in `benchmarks/` for capture commands and interpretation limits.
 
