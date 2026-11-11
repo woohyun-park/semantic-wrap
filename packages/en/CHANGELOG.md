@@ -1,5 +1,12 @@
 # @semantic-wrap/en
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [47b69e8]
+  - @semantic-wrap/core@0.4.1
+
 ## 0.4.0
 
 ### Patch Changes
