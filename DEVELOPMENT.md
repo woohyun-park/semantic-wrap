@@ -1,6 +1,7 @@
 # Development
 
-Use Bun and start with `git status --short` to identify existing work. Repository-owned
+Use Bun, branch from `develop`, and start with `git status --short` to identify existing work.
+See [RELEASING.md](RELEASING.md) for how `develop` reaches `main`. Repository-owned
 behavior is documented in package source, tests, and READMEs. Historical performance
 tradeoffs live in `benchmarks/`; read the relevant report before designing another experiment.
 
