@@ -21,5 +21,6 @@
 
 ## Releases
 
+- Branch from `develop` and target it with pull requests (rebase merge). `main` holds released code only and changes through `develop` → `main` release pull requests (merge commit, never squash or rebase) and the version pull request.
 - Package-facing changes need a Changeset; docs-app, test-only, and internal-tooling changes do not. Keep the four public packages at the fixed shared version in `.changeset/config.json`.
 - Follow [RELEASING.md](RELEASING.md) for release operations.

@@ -497,7 +497,8 @@ Add a Changeset for every package-facing change.
 bun changeset
 ```
 
-Merging to `main` creates or updates one version pull request. Merging that pull request
+Pull requests merge into `develop`. Merging `develop` into `main` creates or updates one
+version pull request. Merging that pull request
 publishes all four fixed-version packages through npm trusted publishing, creates the package
 git tags and a unified GitHub Release, then verifies that npm, git, and GitHub all report the
 same version. See [RELEASING.md](https://github.com/woohyun-park/semantic-wrap/blob/main/RELEASING.md) for the one-time repository setup.
