@@ -25,17 +25,24 @@ if (process.argv.includes("--serve") && !process.env.LIGHTHOUSE_ORIGIN) {
   process.on("exit", () => preview.kill());
   process.on("SIGINT", () => process.exit(130));
   process.on("SIGTERM", () => process.exit(143));
-  await new Promise((ready, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Preview did not start within 30 seconds")), 30_000);
-    let log = "";
-    preview.stderr.on("data", data => { log += data; });
-    preview.on("error", error => { clearTimeout(timeout); reject(error); });
-    preview.on("exit", code => { clearTimeout(timeout); reject(new Error(`Preview exited (${code}): ${log}`)); });
-    preview.stdout.on("data", data => {
-      log += data;
-      if (log.includes("Local:")) { clearTimeout(timeout); ready(); }
-    });
-  });
+  // Poll the server instead of parsing its log: Vite colors "Local:" when CI enables color output.
+  let log = "";
+  let failure;
+  preview.stdout.on("data", data => { log += data; });
+  preview.stderr.on("data", data => { log += data; });
+  preview.on("error", error => { failure = error; });
+  preview.on("exit", code => { failure ??= new Error(`Preview exited (${code}): ${log}`); });
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    if (failure) throw failure;
+    try {
+      if ((await fetch(origin)).ok) break;
+    } catch {
+      // Not listening yet.
+    }
+    if (Date.now() > deadline) throw new Error(`Preview did not start within 30 seconds: ${log}`);
+    await new Promise(wait => setTimeout(wait, 250));
+  }
 }
 
 function run(command, args, options = {}) {
