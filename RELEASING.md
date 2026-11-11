@@ -53,25 +53,55 @@ expires after one hour and is revoked automatically when the job finishes. The a
 directly to `changesets/action`; it is not an npm credential.
 
 Keep **Allow GitHub Actions to create and approve pull requests** enabled under
-**Settings → Actions → General**. Required checks for `main` should remain `check`,
-`node-smoke (22)`, and `node-smoke (24)`.
+**Settings → Actions → General**.
+
+### Branches
+
+`develop` is the integration branch and the repository default. `main` contains released code
+only, so it always matches the latest published version.
+
+| Setting | `develop` | `main` |
+| --- | --- | --- |
+| Pull request merge method | Rebase | Merge commit |
+| Required checks | `check`, `node-smoke (22)`, `node-smoke (24)` | Same |
+| Require linear history | Off | Off |
+| Release app may bypass the pull request requirement | Yes | No |
+
+Enable **Allow merge commits** and **Allow rebase merging** under **Settings → General** and keep
+squash merging disabled. Use a ruleset per branch to restrict it to its merge method.
+
+- Never squash or rebase a `develop` → `main` pull request. Without the merge commit the two
+  branches stop sharing history, and Changesets that were already consumed are released again.
+- Keep `develop` protected against deletion. **Automatically delete head branches** otherwise
+  removes it when a release pull request merges.
+- `develop` cannot require linear history, because the Release workflow brings the merge commits
+  on `main` back into it.
 
 ## Release flow
 
-1. Add a Changeset for every package-facing change:
+1. Branch from `develop` and add a Changeset for every package-facing change:
 
    ```sh
    bun changeset
    ```
 
-2. Merge the feature pull request after CI passes.
-3. The Release workflow creates or updates `chore: version packages` using the release app.
-4. Required CI checks run automatically on that version pull request.
-5. Merge the version pull request after its checks pass.
-6. The next Release workflow publishes all four packages through npm Trusted Publishing.
-7. The workflow creates package tags and one `vX.Y.Z` GitHub Release.
-8. It installs the published packages in a temporary consumer project and verifies npm, Git tags,
+2. Rebase-merge the feature pull request into `develop` after CI passes. This publishes nothing.
+3. To release, open a pull request from `develop` to `main` and merge it with a merge commit
+   after CI passes.
+4. The Release workflow creates or updates `chore: version packages` against `main` using the
+   release app.
+5. Required CI checks run automatically on that version pull request.
+6. Merge the version pull request with a merge commit after its checks pass.
+7. The next Release workflow publishes all four packages through npm Trusted Publishing.
+8. The workflow creates package tags and one `vX.Y.Z` GitHub Release.
+9. It installs the published packages in a temporary consumer project and verifies npm, Git tags,
    and the GitHub Release use the same version.
+10. It brings `develop` up to date with `main`, which carries the version bump, changelogs, and
+    consumed Changesets back. This is a fast-forward when nothing merged into `develop` during
+    the release and a merge commit otherwise.
+
+A release with no pending Changesets skips steps 4 to 8: the push to `main` verifies the version
+that is already published and then updates `develop`.
 
 Documentation, tests, and repository tooling do not require a Changeset unless they alter files
 shipped in a public package.
@@ -111,5 +141,11 @@ bun run release:verify --remote
   four packages, especially `release.yml`, the blank Environment, and the `npm publish` action.
 - **A Release workflow fails after the version pull request is merged:** fix the configuration and
   rerun the failed workflow job. Do not create another Changeset or bump the version again.
+- **The `develop` update fails:** a change merged into `develop` during the release conflicts
+  with the version commit. Merge `main` into `develop` locally, resolve the conflict, and push
+  `develop` directly with an account that may bypass its pull request requirement. Do not open a
+  rebase-merged pull request for it; that drops the merge commit.
+- **A release pull request reports that `develop` is out of date:** the previous `develop` update
+  did not run. Rerun the failed Release workflow job before merging.
 - **Remote synchronization fails:** run `git fetch --tags`, then `bun run release:verify --remote`
   to identify whether npm, a package tag, or the unified GitHub Release is missing.

@@ -580,15 +580,17 @@ bun run check
 
 ## 배포
 
-네 패키지는 의존성 순서대로 배포합니다.
+패키지에 영향을 주는 변경에는 Changeset을 추가합니다.
 
 ```sh
-bun run check
-bun run publish:core
-bun run publish:en
-bun run publish:ko
-bun run publish:react
+bun changeset
 ```
+
+Pull request는 `develop`에 병합합니다. `develop`을 `main`에 병합하면 버전 pull request가
+생성되거나 갱신됩니다. 이 pull request를 병합하면 버전이 고정된 네 패키지가 npm trusted
+publishing으로 배포되고, 패키지 git 태그와 통합 GitHub Release가 생성된 뒤 npm, git, GitHub의
+버전이 서로 일치하는지 검증합니다. 저장소 최초 설정은 [RELEASING.md](./RELEASING.md)를
+참고하세요.
 
 ## 라이선스
 

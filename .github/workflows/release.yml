@@ -65,3 +65,29 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_COMMIT: ${{ steps.changesets.outputs.published == 'true' && github.sha || '' }}
         run: bun run release:verify --remote
+      - name: Bring develop up to date with main
+        if: ${{ !cancelled() && steps.changesets.outcome == 'success' && steps.changesets.outputs.has-changesets != 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+        run: |
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/develop...${GITHUB_SHA}" --jq .status)"
+          case "$status" in
+            identical | behind)
+              echo "develop already contains ${GITHUB_SHA}."
+              ;;
+            ahead)
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/develop" \
+                -f sha="$GITHUB_SHA" -F force=false --silent
+              echo "Fast-forwarded develop to ${GITHUB_SHA}."
+              ;;
+            diverged)
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/merges" \
+                -f base=develop -f head="$GITHUB_SHA" \
+                -f commit_message="chore: merge main into develop" --silent
+              echo "Merged ${GITHUB_SHA} into develop."
+              ;;
+            *)
+              echo "Unexpected comparison status: ${status}" >&2
+              exit 1
+              ;;
+          esac
