@@ -1,7 +1,11 @@
-import { enTitleModel } from "@semantic-wrap/en";
-import { koTitleModel } from "@semantic-wrap/ko";
+import { createContext, useContext } from "react";
+import type { PhraseModel } from "@semantic-wrap/core";
+import type { SiteLocale } from "./site-config";
 
-export const titleModels = {
-  en: enTitleModel,
-  ko: koTitleModel,
-} as const;
+export const TitleModelContext = createContext<{ locale: SiteLocale; model: PhraseModel } | null>(null);
+
+export function useTitleModel(locale: SiteLocale): PhraseModel {
+  const context = useContext(TitleModelContext);
+  if (!context || context.locale !== locale) throw new Error(`Missing title model for ${locale}`);
+  return context.model;
+}

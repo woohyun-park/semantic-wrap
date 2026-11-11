@@ -62,13 +62,19 @@ only, so it always matches the latest published version.
 
 | Setting | `develop` | `main` |
 | --- | --- | --- |
+| Enforced by | Ruleset `develop` | Branch protection and ruleset `main-merge-method` |
 | Pull request merge method | Rebase | Merge commit |
 | Required checks | `check`, `node-smoke (22)`, `node-smoke (24)` | Same |
 | Require linear history | Off | Off |
-| Release app may bypass the pull request requirement | Yes | No |
+| Deletion and force pushes | Blocked | Blocked |
+| Bypass | The release app only, for every rule | Nobody, administrators included |
 
 Enable **Allow merge commits** and **Allow rebase merging** under **Settings → General** and keep
-squash merging disabled. Use a ruleset per branch to restrict it to its merge method.
+squash merging disabled.
+
+Branch protection on a personally owned repository cannot let an app bypass the pull request
+requirement, so every `develop` rule lives in its ruleset with the release app as the only bypass
+actor. Administrators cannot push to `develop` directly either.
 
 - Never squash or rebase a `develop` → `main` pull request. Without the merge commit the two
   branches stop sharing history, and Changesets that were already consumed are released again.
@@ -142,9 +148,9 @@ bun run release:verify --remote
 - **A Release workflow fails after the version pull request is merged:** fix the configuration and
   rerun the failed workflow job. Do not create another Changeset or bump the version again.
 - **The `develop` update fails:** a change merged into `develop` during the release conflicts
-  with the version commit. Merge `main` into `develop` locally, resolve the conflict, and push
-  `develop` directly with an account that may bypass its pull request requirement. Do not open a
-  rebase-merged pull request for it; that drops the merge commit.
+  with the version commit. Merge `main` into `develop` locally and resolve the conflict. Set the
+  `develop` ruleset's enforcement to **Disabled**, push `develop`, and set it back to **Active**
+  immediately. Do not open a rebase-merged pull request for it; that drops the merge commit.
 - **A release pull request reports that `develop` is out of date:** the previous `develop` update
   did not run. Rerun the failed Release workflow job before merging.
 - **Remote synchronization fails:** run `git fetch --tags`, then `bun run release:verify --remote`

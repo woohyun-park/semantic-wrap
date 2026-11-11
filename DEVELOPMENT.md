@@ -46,10 +46,18 @@ For missing browser binaries, install them with
 
 ## Performance and diagnostics
 
+`bun run site:build && bun run site:audit` measures all four site routes on mobile
+and desktop (three runs each), enforces median Lighthouse budgets, and saves HTML
+and JSON reports under `dogfood-output/lighthouse/`. The runner owns preview port
+4193 and stops it on completion. Use `LIGHTHOUSE_ORIGIN` for an existing preview or
+production URL. Do not run this concurrently with browser tests or benchmarks.
+See `benchmarks/site-seo-lighthouse.md` for baseline results and production limitations.
+
 `bench:*` and `record:*` browser commands use only the package fixture server. Run a
-benchmark only for a performance question, with its documented inputs and a frozen
-baseline where required. Resize comparisons need `SEMANTIC_WRAP_RESIZE_BASELINE`;
-scheduling comparisons also need `SEMANTIC_WRAP_OPTIONS_BASELINE`. See the relevant
+benchmark whenever a claim about speed or layout quality needs evidence, with its
+documented inputs and a frozen baseline where required. Resize comparisons need
+`SEMANTIC_WRAP_RESIZE_BASELINE`; scheduling comparisons also need
+`SEMANTIC_WRAP_OPTIONS_BASELINE`. See the relevant
 report in `benchmarks/` for capture commands and interpretation limits.
 
 Keep traces, videos, and screenshots in ignored `test-results/`, `playwright-report/`,
