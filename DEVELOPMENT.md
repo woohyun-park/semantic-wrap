@@ -55,8 +55,9 @@ See `benchmarks/site-seo-lighthouse.md` for baseline results and production limi
 
 `bench:*` and `record:*` browser commands use only the package fixture server. Run a
 benchmark whenever a claim about speed or layout quality needs evidence, with its
-documented inputs and a frozen baseline where required. Resize comparisons need `SEMANTIC_WRAP_RESIZE_BASELINE`;
-scheduling comparisons also need `SEMANTIC_WRAP_OPTIONS_BASELINE`. See the relevant
+documented inputs and a frozen baseline where required. Resize comparisons need
+`SEMANTIC_WRAP_RESIZE_BASELINE`; scheduling comparisons also need
+`SEMANTIC_WRAP_OPTIONS_BASELINE`. See the relevant
 report in `benchmarks/` for capture commands and interpretation limits.
 
 Keep traces, videos, and screenshots in ignored `test-results/`, `playwright-report/`,
